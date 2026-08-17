@@ -1,6 +1,7 @@
 # pagedMark
 
 [![test](https://github.com/doofzoff/pagedMark/actions/workflows/test.yml/badge.svg)](https://github.com/doofzoff/pagedMark/actions/workflows/test.yml)
+[![pypi](https://img.shields.io/pypi/v/pagedmark?color=006dad)](https://pypi.org/project/pagedmark/)
 ![platform](https://img.shields.io/badge/platform-Apple%20Silicon%20%C2%B7%20CUDA-111111)
 ![python](https://img.shields.io/badge/python-3.11%20%E2%80%93%203.14-3776ab)
 ![license](https://img.shields.io/badge/license-Apache%202.0-4c1)
