@@ -178,7 +178,9 @@ all = ["pagedmark[video,heif,detect,trustmark,text-restoration,migan]"]
 pagedmark = "pagedmark.cli:main"
 
 [project.urls]
+Homepage = "https://github.com/doofzoff/pagedMark"
 Repository = "https://github.com/doofzoff/pagedMark"
+Issues = "https://github.com/doofzoff/pagedMark/issues"
 
 [build-system]
 requires = ["hatchling"]
