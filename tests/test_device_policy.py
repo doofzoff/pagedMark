@@ -294,11 +294,19 @@ class TestResidencyPolicy:
         assert "1.0 GiB" in message
         assert "identify" in message, "the refusal names the commands that still run"
 
-    def test_the_text_encoders_are_released_only_where_that_was_measured(self):
-        from pagedmark._internal.watermark_profiles import sdxl_releases_text_encoders
+    def test_the_text_encoders_stay_resident(self):
+        """A recorded negative result: releasing them produced black face crops.
 
-        assert sdxl_releases_text_encoders(MPS_DEVICE) is True
-        assert sdxl_releases_text_encoders(CUDA_DEVICE) is False
+        The saving is real -- 1.52 GiB of a loaded 8.79 GiB -- and it is not taken,
+        because with the encoders released the 512-px-wide crops of a four-face photo
+        came back as all-zero rectangles at the same seed that produced correct faces
+        with them resident. The embeddings are innocent (CPU and MPS encodings agree to
+        0.0009 on tensors of standard deviation 3.06); the allocation pattern is not.
+        This test exists so the optimisation is not re-added from first principles.
+        """
+        from pagedmark._internal import watermark_profiles
+
+        assert not hasattr(watermark_profiles, "sdxl_releases_text_encoders")
 
 
 class TestVaeTilingPolicy:
@@ -391,9 +399,6 @@ class TestSamplingPolicyReachesTheLoader:
         pipe = MagicMock()
         pipe.to.return_value = pipe
         pipe.load_lora_weights.side_effect = lambda *a, **k: calls.__setitem__("lora", calls["lora"] + 1)
-        # The loader encodes the fixed prompts before dropping the encoders, so the fake
-        # has to answer that call with the four values SDXL's encoder returns.
-        pipe.encode_prompt.return_value = (MagicMock(), None, MagicMock(), None)
 
         monkeypatch.setattr(diffusers.ControlNetModel, "from_pretrained", staticmethod(lambda *a, **k: MagicMock()))
         monkeypatch.setattr(diffusers.AutoencoderKL, "from_pretrained", staticmethod(lambda *a, **k: MagicMock()))
@@ -434,14 +439,6 @@ class TestSamplingPolicyReachesTheLoader:
         _calls, pipe = self._load_with_recorder(monkeypatch, MPS_DEVICE, budget_gib=11.84)
 
         pipe.enable_sequential_cpu_offload.assert_not_called()
-
-    def test_mps_encodes_the_prompts_once_and_drops_the_encoders(self, monkeypatch):
-        pytest.importorskip("diffusers")
-        _calls, pipe = self._load_with_recorder(monkeypatch, MPS_DEVICE)
-
-        pipe.encode_prompt.assert_called_once()
-        assert pipe.text_encoder is None
-        assert pipe.text_encoder_2 is None
 
     def test_cuda_still_fuses_it(self, monkeypatch):
         """The discriminating half: without this, a loader that never fuses passes."""
@@ -549,3 +546,55 @@ class TestFaceStageFlagReachesThePipeline:
         monkeypatch.setattr(pipeline, "_run_faces", lambda *args, **kwargs: repaired)
 
         assert pipeline.run(Image.new("RGB", (32, 32)), strength=0.15, seed=0) is repaired
+
+
+def _full_mask(width: int, height: int):
+    """A mask that covers the whole crop, so compositing is unambiguous."""
+    import numpy as np
+
+    return np.full((height, width), 255, dtype=np.uint8)
+
+
+class TestEmptyFaceCropGuard:
+    """An all-zero crop must never reach the composite."""
+
+    @staticmethod
+    def _run(monkeypatch, detailed):
+        from PIL import Image
+
+        from pagedmark._internal import qwen_zimage_pipeline as module
+
+        monkeypatch.setattr(module, "detect_faces", lambda image: [(8, 8, 40, 40)])
+        pipeline = module.QwenZImagePipeline(device=CUDA_DEVICE, torch_dtype=None, face_stage=True)
+        global_result = Image.new("RGB", (64, 64), (10, 20, 30))
+        monkeypatch.setattr(pipeline, "_run_global", lambda *a, **k: global_result)
+        monkeypatch.setattr(pipeline, "_sam_masks", lambda *a, **k: [_full_mask(64, 64)])
+        monkeypatch.setattr(pipeline, "_regenerate_face_crop", lambda *a, **k: detailed)
+        return pipeline.run(Image.new("RGB", (64, 64), (200, 200, 200)), strength=0.15, seed=0)
+
+    def test_an_empty_repair_is_dropped_rather_than_composited(self, monkeypatch):
+        """fp16 sampling on Metal does return all-zero crops, silently and repeatably.
+
+        A face-shaped black rectangle is the worst output this stage can produce, so the
+        global stage's face is kept instead.
+        """
+        import numpy as np
+        from PIL import Image
+
+        result = self._run(monkeypatch, Image.new("RGB", (32, 32), (0, 0, 0)))
+
+        region = np.asarray(result)[8:40, 8:40]
+        assert region.max() > 0, "the black crop was composited"
+        # Untouched: still exactly the global stage's pixels.
+        assert (region == np.array([10, 20, 30], dtype=np.uint8)).all()
+
+    def test_a_real_repair_still_lands(self, monkeypatch):
+        """The discriminating half: the guard must not swallow a legitimate dark face."""
+        import numpy as np
+        from PIL import Image
+
+        detailed = Image.fromarray(np.dstack([np.tile(np.arange(32, dtype=np.uint8), (32, 1))] * 3))
+        result = self._run(monkeypatch, detailed)
+
+        region = np.asarray(result)[8:40, 8:40]
+        assert not (region == np.array([10, 20, 30], dtype=np.uint8)).all(), "a varied crop must be composited"

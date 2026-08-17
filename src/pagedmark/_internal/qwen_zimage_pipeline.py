@@ -379,6 +379,17 @@ def build_face_kwargs(crop: Image.Image, *, strength: float, seed: int | None) -
     }
 
 
+def _is_degenerate(image: Image.Image) -> bool:
+    """Whether a regenerated crop carries no image at all.
+
+    Deliberately narrow: an all-but-constant frame. A dark crop of a night photo is
+    legitimate and must pass, so the test is the absence of variation rather than a
+    brightness threshold.
+    """
+    array = np.asarray(image.convert("RGB"))
+    return bool(array.max() == 0 or float(array.std()) < 1.0)
+
+
 def composite_face(base: np.ndarray, detail: np.ndarray, mask: np.ndarray, *, feather: int = 10) -> np.ndarray:
     """Feather ``detail`` into ``base`` while preserving every zero-mask pixel."""
     import cv2
@@ -1133,6 +1144,14 @@ class QwenZImagePipeline:
                 )
             crop_image = Image.fromarray(crop_source).resize(process_size, Image.Resampling.LANCZOS)
             detailed = self._regenerate_face_crop(crop_image, index, len(boxes), strength=strength, seed=detail_seed)
+            if _is_degenerate(detailed):
+                # A face-shaped black rectangle is the worst output this stage can
+                # produce, and fp16 sampling on Metal does occasionally return one: an
+                # all-zero crop, deterministic for a given size and strength, with no
+                # error raised anywhere. Keeping the global stage's face is a visible
+                # non-improvement; compositing the empty crop is a ruined photograph.
+                self._progress(f"Face {index}/{len(boxes)} came back empty; keeping the global result there.")
+                continue
             detailed = detailed.convert("RGB").resize((cx2 - cx1, cy2 - cy1), Image.Resampling.LANCZOS)
 
             base_crop = base[cy1:cy2, cx1:cx2]

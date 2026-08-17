@@ -130,7 +130,8 @@ SDXL_LIGHTNING_DEVICES = (CUDA_DEVICE,)
 SDXL_UNDISTILLED_GLOBAL_STEPS = 16
 
 # How much of the device the weights want, measured on an M5 with the text encoders
-# already released (see `sdxl_releases_text_encoders`):
+# released -- an experiment that is no longer taken (see the note below), so treat the
+# resident figure as the floor rather than the exact number:
 #
 # - resident: 7.70 GiB peak while running a 0.44 MP frame, 7.1 s.
 # - sequentially offloaded to the CPU: 0.28 GiB peak for the same frame, 24.1 s.
@@ -193,18 +194,19 @@ def sdxl_residency_plan(memory_gib: float) -> ResidencyPlan:
     )
 
 
-def sdxl_releases_text_encoders(device: str) -> bool:
-    """Whether to encode the fixed prompts once and drop the text encoders.
-
-    Both prompts are compile-time constants and the stage runs at CFG 1.0, so exactly one
-    embedding is ever needed -- and at CFG 1.0 Diffusers never encodes the negative
-    prompt at all, which makes that constant inert on this path. Releasing the two
-    encoders afterwards frees a measured 1.52 GiB of the 8.79 GiB the loaded stack holds.
-
-    MPS only, for the same reason as every other decision here: it is where the number
-    was measured.
-    """
-    return device.casefold() == MPS_DEVICE
+# Encoding the two fixed prompts once and releasing the text encoders frees a measured
+# 1.52 GiB of the 8.79 GiB the loaded stack holds, and it is NOT done here. It was, and
+# it produced all-zero face crops: with the encoders resident every crop of a four-face
+# photo came back correct, and with them released the two 512-px-wide crops came back as
+# black rectangles, deterministically, at the same seed. The embeddings themselves are
+# not the problem -- CPU fp16, MPS fp16 and fp32 encodings of that prompt agree to 0.0009
+# on tensors with a standard deviation of 3.06, and the same crop generated in isolation
+# is correct either way. What changes is the allocation pattern the crops run into after
+# the global pass, and fp16 sampling on Metal answers a bad one with silent zeros.
+#
+# 1.5 GiB is not worth a black rectangle over someone's face, and the small-memory path
+# does not need it: sequential offload already brings the peak to 0.28 GiB. The guard in
+# `_run_faces` now catches an empty crop whatever produces it.
 
 
 def sdxl_lightning_enabled(device: str) -> bool:

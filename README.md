@@ -153,14 +153,21 @@ module at a time. Same output, and a peak that fits anything:
 | Weights resident (16 GB Mac) | 7.70 GiB | 7.1 s |
 | Weights streamed (8 GB Mac) | **0.28 GiB** | 24.1 s |
 
-Two things make that work. The fixed prompts are encoded once on the CPU and both text
-encoders are dropped before anything reaches the device — 1.52 GiB of a loaded 8.79 GiB,
-for text that cannot change between runs. And the plan is chosen from the measured
-budget, then **stated**: a run three times slower than the fast path says so before you
-wait through it, instead of looking broken.
-
-Below about 2 GiB nothing is left to trade, and the refusal says which commands still
+The plan is chosen from the measured budget and then **stated**: a run three times
+slower than the fast path says so before you wait through it, instead of looking broken.
+Below about 2 GiB nothing is left to trade, and the refusal names the commands that still
 work there rather than failing inside a model loader.
+
+One saving was measured, implemented, and then withdrawn. Encoding the two fixed prompts
+once and releasing the text encoders frees 1.52 GiB of a loaded 8.79 GiB — and with them
+released, two of the four face crops in a test photo came back as **all-zero black
+rectangles**, deterministically, at the same seed that produced correct faces with them
+resident. The embeddings are not at fault (CPU and Metal encodings of that prompt agree to
+0.0009 on tensors with a standard deviation of 3.06, and the same crop generated in
+isolation is correct either way); the allocation pattern the crops meet after the global
+pass is. 1.5 GiB is not worth a black rectangle over someone's face, and the offloaded
+path does not need it. A guard now drops any empty crop and keeps the global stage's face
+instead, whatever produced it.
 
 ### Metal has numerical floors
 
