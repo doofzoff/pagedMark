@@ -14,9 +14,30 @@ The optional TrustMark decoder downloads weights into its installed package dire
 
 ## Checks
 
-There is no hosted CI: `maintain.sh` is the gate, and it runs Ruff, Pyright over `src/`,
-and the parallel test suite. Run it before every commit, and keep `uv.lock` compatible
-with `uv sync --frozen`.
+`.github/workflows/test.yml` runs Ruff, Pyright over `src/` and the suite on macOS arm64
+across two Python minors, with a Linux job for the paths that carry no Metal. Locally,
+`bash maintain.sh` is the same gate plus the dependency and vulnerability checks. Keep
+`uv.lock` compatible with `uv sync --frozen`.
+
+### When a job fails with no steps
+
+A job that completes in a few seconds with no runner assigned and no steps recorded has
+not run at all, and its log blob does not exist -- so the reason is invisible in the usual
+places. Two causes produce exactly that signature:
+
+- an unresolvable `uses:` reference, which is rejected before the first step;
+- the account being unable to run jobs, which GitHub reports only as a check-run
+  annotation.
+
+Read the annotation rather than guessing:
+
+```bash
+gh api repos/OWNER/REPO/commits/SHA/check-runs --jq '.check_runs[].id' \
+  | xargs -I{} gh api repos/OWNER/REPO/check-runs/{}/annotations --jq '.[].message'
+```
+
+That is how this repository's first failure was diagnosed: it was billing, and the action
+versions bumped alongside it were merely out of date, not the cause.
 
 
 ## Fixture and data policy
