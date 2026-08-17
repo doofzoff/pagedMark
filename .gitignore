@@ -1,0 +1,59 @@
+# Dependencies
+.venv/
+__pycache__/
+*.egg-info/
+dist/
+build/
+tmp/
+.sc/
+
+# Environment secrets
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Generated calibration inputs
+data/synthid_corpus/refs/
+
+# Reference materials
+_refs/
+
+# Downloaded model weights
+yolov8n.pt
+.coverage
+
+# Claude Code local settings
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# Generated calibration inputs and local evaluation artifacts
+data/doubao_capture/seeds/
+data/jimeng_capture/seeds/
+data/jimeng_capture/captures/jimeng_content_*.png
+data/gemini_capture/seeds/
+data/gemini_capture/captures/gemini_content_*.png
+data/samsung_capture/seeds/
+data/samsung_capture/captures/samsung_content_*
+
+# Runtime model artifacts
+gfpgan/
+
+# Local evaluation data
+.local-eval/
+
+# Other harnesses' generated config. Claude's sync owns these; a committed copy
+# is a second source nobody reconciles. Anchored so a same-named source file
+# deeper in the tree is not caught.
+/.agents/
+/.codex/
+/.opencode/
+/opencode.json
+/opencode.jsonc

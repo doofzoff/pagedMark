@@ -1,0 +1,51 @@
+{
+  "ChatGPT Image May 31, 2026, 02_02_23 PM.png": [
+    {"box": [156, 206, 709, 296], "text": "This is a longer", "script": "alphabetic"},
+    {"box": [157, 293, 939, 379], "text": "sample text in English.", "script": "alphabetic"},
+    {"box": [165, 393, 774, 434], "text": "Typography can flow smoothly from", "script": "alphabetic"},
+    {"box": [161, 434, 521, 477], "text": "large to medium size.", "script": "alphabetic"},
+    {"box": [165, 495, 566, 522], "text": "Smaller lines help demonstrate hierarchy,", "script": "alphabetic"},
+    {"box": [165, 524, 354, 550], "text": "rhythm, and clarity.", "script": "alphabetic"},
+    {"box": [165, 564, 448, 585], "text": "Even the finest text should remain", "script": "alphabetic"},
+    {"box": [165, 593, 330, 613], "text": "clean and readable.", "script": "alphabetic"},
+    {"box": [158, 673, 903, 740], "text": "这是一段较长的中文示例文本。", "script": "cjk"},
+    {"box": [162, 753, 697, 793], "text": "排版可以从大字号逐渐过渡到中字号。", "script": "cjk"},
+    {"box": [164, 807, 524, 829], "text": "更小的文字能够展示层次、节奏与清晰度。", "script": "cjk"},
+    {"box": [163, 845, 483, 868], "text": "即使是最小的一行，也应该保持清楚易读。", "script": "cjk"},
+    {"box": [162, 951, 780, 1009], "text": "Это более длинный пример", "script": "alphabetic"},
+    {"box": [161, 1019, 723, 1062], "text": "текста на русском языке.", "script": "alphabetic"},
+    {"box": [165, 1076, 639, 1104], "text": "Типографика может плавно переходить от", "script": "alphabetic"},
+    {"box": [165, 1111, 505, 1133], "text": "крупного размера к среднему.", "script": "alphabetic"},
+    {"box": [165, 1151, 513, 1172], "text": "Более мелкие строки показывают иерархию,", "script": "alphabetic"},
+    {"box": [167, 1178, 287, 1192], "text": "ритм и ясность.", "script": "alphabetic"},
+    {"box": [165, 1210, 417, 1227], "text": "Даже самый маленький текст должен", "script": "alphabetic"},
+    {"box": [165, 1235, 381, 1247], "text": "оставаться чистым и читаемым.", "script": "alphabetic"}
+  ],
+  "ChatGPT Image May 31, 2026, 02_03_55 PM.png": [
+    {"box": [165, 204, 754, 299], "text": "This is a longer", "script": "alphabetic"},
+    {"box": [167, 295, 1006, 385], "text": "sample text in English.", "script": "alphabetic"},
+    {"box": [171, 401, 831, 446], "text": "Typography can flow smoothly from", "script": "alphabetic"},
+    {"box": [169, 446, 560, 491], "text": "large to medium size.", "script": "alphabetic"},
+    {"box": [173, 507, 605, 536], "text": "Smaller lines help demonstrate hierarchy,", "script": "alphabetic"},
+    {"box": [173, 538, 379, 567], "text": "rhythm, and clarity.", "script": "alphabetic"},
+    {"box": [175, 583, 481, 603], "text": "Even the finest text should remain", "script": "alphabetic"},
+    {"box": [173, 611, 352, 632], "text": "clean and readable.", "script": "alphabetic"},
+    {"box": [170, 693, 956, 757], "text": "这是一段较长的中文示例文本。", "script": "cjk"},
+    {"box": [174, 775, 740, 812], "text": "排版可以从大字号逐渐过渡到中字号。", "script": "cjk"},
+    {"box": [175, 829, 561, 852], "text": "更小的文字能够展示层次、节奏与清晰度。", "script": "cjk"},
+    {"box": [174, 869, 534, 892], "text": "即使是最小的一行，也应该保持清楚易读。", "script": "cjk"},
+    {"box": [169, 958, 824, 1022], "text": "Это более длинный пример", "script": "alphabetic"},
+    {"box": [171, 1029, 764, 1074], "text": "текста на русском языке.", "script": "alphabetic"},
+    {"box": [175, 1090, 678, 1119], "text": "Типографика может плавно переходить от", "script": "alphabetic"},
+    {"box": [175, 1125, 546, 1151], "text": "крупного размера к среднему.", "script": "alphabetic"},
+    {"box": [175, 1169, 552, 1192], "text": "Более мелкие строки показывают иерархию,", "script": "alphabetic"},
+    {"box": [175, 1196, 312, 1217], "text": "ритм и ясность.", "script": "alphabetic"},
+    {"box": [175, 1233, 479, 1253], "text": "Даже самый маленький текст должен", "script": "alphabetic"},
+    {"box": [177, 1259, 440, 1272], "text": "оставаться чистым и читаемым.", "script": "alphabetic"}
+  ],
+  "Gemini_Generated_Image_633uuy633uuy633u.png": [
+    {"box": [1281, 650, 2357, 818], "text": "每天都是一个新的机会。", "script": "cjk"},
+    {"box": [1466, 788, 2167, 957], "text": "用微笑开始它。", "script": "cjk"},
+    {"box": [1367, 910, 2264, 1112], "text": "世界也会向你微笑。", "script": "cjk"}
+  ]
+}
