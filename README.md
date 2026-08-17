@@ -193,7 +193,4 @@ user-directed by design. See [scope, safety and legal notes](docs/legal-and-safe
 
 ## License
 
-[Apache 2.0](LICENSE). Portions of this project derive from
-[remove-ai-watermarks](https://github.com/wiltodelta/remove-ai-watermarks) by wiltodelta,
-also Apache 2.0; the derivation and a file-by-file list of changes are recorded in
-[NOTICE](NOTICE).
+[Apache 2.0](LICENSE)
