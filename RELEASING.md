@@ -17,6 +17,11 @@ registers it. Claim it through a **pending publisher**, which needs no upload to
 That reserves the name against this repository. Nothing else can publish under it, and no
 secret is stored anywhere.
 
+> **0.1.0 was uploaded from a laptop, not by this workflow.** Actions could not start jobs
+> at the time (a billing block on the account), and the name was worth claiming on launch
+> day. If the workflow ever runs for the `v0.1.0` tag it will fail against PyPI's
+> duplicate-file rule, which is correct and harmless. From 0.1.1 the tag is the trigger.
+
 ## Cut a release
 
 ```bash
