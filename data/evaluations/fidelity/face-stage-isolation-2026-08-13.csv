@@ -1,0 +1,5 @@
+date,source_commit,fixture,route,seed,global_strength,face_strength,face_count,id_cos,face_lpips,lapvar_ratio,img_lpips,ssim,psnr_db,output_sha256,gemini_oracle
+2026-08-13,2d03a00,Gemini_Generated_Image_y48j3cy48j3cy48j.png,visible-metadata-control,0,,,18,,,,,,,9f67264beb1da66a710885464a11f2ae85989094149f6145521d302cd2db940b,synthid_detected
+2026-08-13,2d03a00,Gemini_Generated_Image_y48j3cy48j3cy48j.png,zimage-face-only,0,,0.06604512532552083,18,0.927,0.028,0.612,0.013,0.959,34.7,c388e9bbf737bb9b22a7cb2216ffb8026321ca632f9db29e1e456b7c14a8553f,synthid_detected
+2026-08-13,2d03a00,Gemini_Generated_Image_y48j3cy48j3cy48j.png,qwen-global-only,0,0.153999996,,18,0.589,0.217,0.331,0.288,0.646,24.2,281a1d28d786d157cbbd13d00a32b215de4dfb3174a3c5e4e83c843e5402138f,clean
+2026-08-13,2d03a00,Gemini_Generated_Image_y48j3cy48j3cy48j.png,qwen-zimage-full,0,0.153999996,0.06604512532552083,18,0.852,0.050,0.492,0.252,0.671,24.7,69de191bddbfbf53348c7638bdba661b6d45d257c00a8a2646b2558670c5a4c2,clean

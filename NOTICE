@@ -1,0 +1,48 @@
+pagedMark
+Copyright 2026 pagedMark contributors
+
+This product includes software developed as part of the remove-ai-watermarks
+project (https://github.com/wiltodelta/remove-ai-watermarks),
+Copyright 2025-2026 wiltodelta, licensed under the Apache License, Version 2.0.
+
+pagedMark is a modified version of that work. The files it changed, and the
+substance of each change, are:
+
+  src/remove_ai_watermarks/_internal/watermark_profiles.py
+  src/remove_ai_watermarks/_internal/watermark_remover.py
+  src/remove_ai_watermarks/_internal/qwen_zimage_pipeline.py
+  src/remove_ai_watermarks/_internal/sdxl_zimage_pipeline.py
+  src/remove_ai_watermarks/invisible_engine.py
+  src/remove_ai_watermarks/api.py
+  src/remove_ai_watermarks/cli.py
+      - Added Metal (MPS) as a supported inference device: device detection and
+        probing, a profile/device support table, per-device dependency and
+        install-hint resolution, and construction-time refusals that name the
+        reason.
+      - Added memory policies for Metal: a per-frame VAE tiling decision and an
+        automatic tiled-diffusion threshold, both derived from measured working
+        sets.
+      - Replaced the four-step distillation LoRA with undistilled sampling on
+        Metal, where running it on the tail of a low-strength schedule invented
+        texture in unconditioned regions.
+      - Added a face-repair stage for Metal that regenerates SAM-masked crops
+        with the resident SDXL stack in place of the CUDA-only Z-Image model,
+        including a strength floor and crop-size cap measured for the fp16 path.
+      - Fixed a float64 dtype in the SAM input preparation, which Metal does not
+        implement.
+      - Rebranded the distribution and command-line name.
+
+  pyproject.toml, README.md, docs/
+      - Distribution metadata, documentation, and the measurement record for the
+        changes above.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this file except in compliance with the License. You may obtain a copy of the
+License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.

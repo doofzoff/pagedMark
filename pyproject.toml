@@ -1,0 +1,250 @@
+[project]
+# This name is the published PyPI distribution, not a local label: changing it
+# strands every `pip install pagedmark` and every pinned dependency
+# on it, including the ComfyUI node package. The console script below carries
+# the same weight, since users have it on PATH.
+name = "pagedmark"
+version = "0.1.0"
+description = "Metal backend for AI watermark removal: SynthID-class pixel regeneration, visible marks and provenance metadata, on Apple Silicon"
+readme = "README.md"
+requires-python = ">=3.11,<3.15"
+license = {text = "Apache-2.0"}
+# Both ship in every artifact: the licence text, and the attribution notice that
+# records what this derives from. A wheel without them is not redistributable.
+license-files = ["LICENSE", "NOTICE"]
+keywords = [
+    "ai-watermark",
+    "ai-watermark-remover",
+    "watermark-remover",
+    "watermark-removal",
+    "remove-watermark",
+    "synthid",
+    "c2pa",
+    "content-credentials",
+    "nano-banana",
+    "gemini",
+    "gemini-watermark",
+    "ai-metadata",
+    "metadata-removal",
+    "provenance",
+    "exif",
+    "stable-diffusion",
+    "comfyui",
+    "ai-detection",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Multimedia :: Graphics :: Graphics Conversion",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Security",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "pillow>=10.0.0",
+    "piexif>=1.1.3",
+    "click>=8.0.0",
+    "python-dotenv>=1.0.0",
+    # Official C2PA reader (Content Authenticity Initiative, MIT/Apache-2.0). The
+    # primary, spec-tracking manifest parser for the identify/metadata path; the
+    # hand-rolled caBX/CBOR scanner in _internal/c2pa.py is kept only as a fallback for
+    # synthetic/partial blobs the validator rejects. Binary wheel (Rust), but the
+    # import is light (no torch/numpy) so it fits the dependency-light identify
+    # host. Prebuilt wheels cover the full CI matrix (linux/macos/windows).
+    "c2pa-python>=0.35.0",
+]
+
+[project.optional-dependencies]
+pixels = [
+    "numpy>=1.24.0; python_version < '3.13'",
+    # NumPy 1.x has no CPython 3.13+ wheels. Requiring 2.x prevents installers
+    # from attempting an unsupported source build on the newer Python lines.
+    "numpy>=2; python_version >= '3.13'",
+    "opencv-python-headless>=4.8.0",
+]
+# Optional HEIC/AVIF pixel decode. Metadata scanning handles these containers
+# without this plugin; combine `heif` with any pixel feature only when needed.
+heif = [
+    "pillow-heif>=0.13.0",
+]
+visible = ["pagedmark[pixels]"]
+# Video visible removal uses the shared pixel runtime. PyAV packetizes processed
+# VFR frames with explicit PTS before system ffmpeg encodes them.
+video = [
+    "pagedmark[visible]",
+    "av>=18,<19",
+]
+# Open DWT-DCT watermarks used by Stable Diffusion / SDXL / FLUX. The in-tree
+# decoder avoids the upstream invisible-watermark package's mandatory torch and
+# non-headless OpenCV dependencies.
+detect = [
+    "pagedmark[pixels]",
+    "PyWavelets>=1.1.1",
+]
+diffusion = [
+    "pagedmark[pixels]",
+    # A GPU torch build is required: invisible-watermark removal has no CPU or XPU
+    # path. The default PyPI wheel carries CUDA on Linux/Windows and Metal (MPS) on
+    # macOS arm64, so this extra is the complete Apple Silicon install -- it is what
+    # runs the sdxl-zimage global stage there. It deliberately stops short of
+    # `qwen-zimage`: that extra adds DiffSynth for stacks whose float8 storage Metal
+    # does not implement, so on a Mac it would download what cannot load.
+    "torch>=2.0.0",
+    "diffusers>=0.38.0",
+    # diffusers 0.38's auto-pipeline registry imports ``Qwen3VLForConditional
+    # Generation`` (its ``nucleusmoe_image`` pipeline), which only exists in
+    # transformers 5.x -- so ``from diffusers import AutoPipelineForImage2Image``
+    # fails on transformers 4.x. The real SDXL-loading break was NOT transformers
+    # 5.x but the tokenizers *release candidate* (0.23.0rc0) that the global
+    # ``prerelease = "allow"`` drags in: its CLIP tokenizer raises
+    # ``RobertaProcessing.__new__() got an unexpected keyword argument 'cls'``.
+    # Cap tokenizers to the stable 0.22 line (transformers 5.x accepts
+    # >=0.22,<=0.23.0) so the rc is excluded while SDXL still loads.
+    "transformers>=5,<6",
+    "tokenizers>=0.22,<0.23",
+    "accelerate>=0.25.0",
+    "safetensors",
+]
+# Full two-stage high-fidelity profile: Qwen-Image-2512 Lightning + DiffSynth
+# Canny ControlNet for the frame, then SAM-masked Z-Image Turbo face repair.
+# CUDA-only (float8 weight streaming) and intentionally separate from the normal
+# diffusion extra because the additional model stack and DiffSynth runtime are large.
+# On Apple Silicon install `diffusion` instead; this extra adds nothing MPS can run.
+qwen-zimage = [
+    "pagedmark[diffusion]",
+    "diffsynth>=2.0.17,<3",
+    "torchvision>=0.20.0",
+]
+# Opt-in verified-text reconstruction over qwen-zimage. LaMa removes the changed
+# candidate glyphs before exact Qwen-VAE cores are composited back.
+text-restoration = [
+    "pagedmark[qwen-zimage,lama]",
+]
+# Adobe TrustMark decoder -- the open, keyless watermark behind Adobe Durable
+# Content Credentials (soft-binding alg ``com.adobe.trustmark.P``). Optional
+# because it pulls torch and downloads model weights on first use. identify()
+# guards the import and skips the TrustMark signal when absent.
+trustmark = [
+    # TrustMark requires NumPy <2, whose last release has no CPython 3.13+
+    # wheels. Keep this feature installable only on its real runtime range.
+    "trustmark>=0.8.0; python_version < '3.13'",
+]
+# Universal region eraser backend -- big-LaMa via onnxruntime (Carve/LaMa-ONNX,
+# Apache-2.0). CPU, no torch. Model (~200 MB) is downloaded on first use and
+# cached by huggingface_hub; it is never bundled in this repo. The default cv2
+# eraser backend needs none of this.
+lama = [
+    "pagedmark[visible]",
+    "onnxruntime>=1.24.0",
+    "huggingface-hub>=0.20.0",
+]
+# Lightweight inpaint backend -- MI-GAN via onnxruntime (andraniksargsyan/migan,
+# MIT). CPU, no torch. Model (~28 MB) downloaded on first use and cached by
+# huggingface_hub; never bundled. ~700-950 MB peak RAM / ~0.19 s/call -- the
+# memory-tight learned tier (vs big-LaMa's ~4.7 GB). Select it explicitly when
+# LaMa, the quality-first `auto` choice, is too large. Same runtime as `lama`.
+migan = [
+    "pagedmark[visible]",
+    "onnxruntime>=1.24.0",
+    "huggingface-hub>=0.20.0",
+]
+dev = [
+    "pagedmark[video]",
+    "pagedmark[detect]",
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "pytest-xdist>=3.5.0",
+    "packaging>=24.0",
+    "ruff>=0.4.0",
+    "pyright>=1.1.0",
+    "invisible-watermark>=0.2.0",
+]
+# ``qwen-zimage`` already pulls ``diffusion``; naming both would suggest diffusion is
+# independently sufficient for a removal, which it is not.
+all = ["pagedmark[video,heif,detect,trustmark,text-restoration,migan]"]
+
+[project.scripts]
+pagedmark = "pagedmark.cli:main"
+
+[project.urls]
+Repository = "https://github.com/doofzoff/pagedMark"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pagedmark"]
+
+[tool.hatch.build.targets.sdist]
+# Keep the source distribution small and public-safe: ship tracked source and
+# metadata, not corpora or local research/session artifacts. The wheel ships
+# only src/.
+include = [
+    "/src",
+    "/LICENSE",
+    "/NOTICE",
+    "/README.md",
+    "/pyproject.toml",
+]
+exclude = [
+    "/data",
+    "/tmp",
+    "/.sc",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-v --tb=short"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+exclude = ["_refs"]
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "I", "S", "UP", "SIM", "RET", "COM", "C4", "G", "PT", "PIE", "T20", "DTZ", "ICN", "TCH", "RUF", "ANN"]
+ignore = [
+    "COM812",  # missing trailing comma (conflicts with ruff formatter)
+    "ANN401",  # typing.Any — sometimes unavoidable with third-party libs
+]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*.py" = ["G004", "S108", "S310", "T20"]
+"tests/*.py" = ["ANN", "S101", "S105", "S106", "S108"]
+"src/pagedmark/_internal/watermark_remover.py" = ["S603", "S606", "S607"]  # nvidia-smi capability probe
+"src/pagedmark/_internal/c2pa.py" = ["S110"]  # try-except-pass for corrupt file handling
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "strict"
+exclude = ["_refs"]
+
+[[tool.pyright.executionEnvironments]]
+root = "tests"
+extraPaths = ["."]
+reportAttributeAccessIssue = false
+reportOptionalSubscript = false
+reportOptionalMemberAccess = false
+reportArgumentType = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+reportMissingTypeArgument = false

@@ -1,0 +1,99 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: Sync dev environment
+        run: uv sync --frozen --extra dev
+      - name: Ruff lint
+        run: uv run ruff check
+      - name: Ruff format check
+        run: uv run ruff format --check
+
+  test:
+    name: test ${{ matrix.os }} py${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Exercise every supported minor. The floor and latest minor run on all
+        # operating systems; intermediate minors run on Linux to bound the
+        # matrix without leaving a declared Python version untested.
+        include:
+          - os: ubuntu-latest
+            python-version: "3.11"
+          - os: macos-latest
+            python-version: "3.11"
+          - os: windows-latest
+            python-version: "3.11"
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: ubuntu-latest
+            python-version: "3.13"
+          - os: ubuntu-latest
+            python-version: "3.14"
+          - os: macos-latest
+            python-version: "3.14"
+          - os: windows-latest
+            python-version: "3.14"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Sync dev environment
+        run: uv sync --frozen --extra dev
+      - name: Run tests
+        run: uv run pytest -q
+
+  transport-contract-python-314:
+    name: versioned transport contracts py3.14
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.14"
+      - name: Create clean runtime contract environment
+        run: uv venv --python 3.14 .venv-contract
+      - name: Install runtime contract dependencies
+        run: >-
+          uv pip install --python .venv-contract/bin/python
+          ".[pixels,heif]" "numpy>=2,<3" "pytest>=8"
+      - name: Run versioned transport contract tests
+        run: >-
+          .venv-contract/bin/python -m pytest -q
+          tests/test_forensic_metadata.py
+          tests/test_metadata_record.py
+          tests/test_pixel_evidence.py
+
+  video-e2e:
+    name: video full-clip end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install --yes ffmpeg
+      - name: Sync dev environment
+        run: uv sync --frozen --extra dev
+      - name: Run full-clip video test
+        run: >-
+          uv run pytest -vv -o faulthandler_timeout=60
+          tests/test_video.py::TestVideoVisibleFullClip
+          tests/test_video_fidelity_probe.py

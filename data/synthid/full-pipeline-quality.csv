@@ -1,0 +1,8 @@
+provider,source_filename,corpus_path,sha256,original_signal_verified_via,final_clean_oracle
+openai,"ChatGPT Image May 30, 2026, 10_31_08 AM.png","originals/ChatGPT Image May 30, 2026, 10_31_08 AM.png",28ff8732b037f98a4ef5bc277bbcdaa32e5eb9ccbd00b6c8c616e46ef68ae8a0,openai-verify,openai-verify-negative-2026-07-25
+openai,"ChatGPT Image May 31, 2026, 02_02_23 PM.png","originals/ChatGPT Image May 31, 2026, 02_02_23 PM.png",228e54413a3ef62b313176dcdba774a56a58c36b54227d1440bc26cbe0aefd82,c2pa-metadata,not-checked-in-final-candidate
+openai,"ChatGPT Image May 31, 2026, 02_03_55 PM.png","originals/ChatGPT Image May 31, 2026, 02_03_55 PM.png",05b836ecfe40fd689177fda74384ae4fdcc446505bbc4281cd3cbb6523eb669e,openai-verify,openai-verify-negative-2026-07-25
+gemini,"Gemini_Generated_Image_3mc4t93mc4t93mc4.png","originals/Gemini_Generated_Image_3mc4t93mc4t93mc4.png",2c33e75a2db614ce74c83cc0a6ac6c3ac735aca83ab88c9c9345843b124f7856,gemini-app,gemini-app-negative-2026-07-25
+gemini,"Gemini_Generated_Image_633uuy633uuy633u.png","originals/Gemini_Generated_Image_633uuy633uuy633u.png",4affd7f27767a445db6abf741355743ba8d95108ad922c9fff045feed8492236,gemini-app,gemini-app-negative-2026-07-25
+gemini,"Gemini_Generated_Image_akdbeiakdbeiakdb.png","originals/Gemini_Generated_Image_akdbeiakdbeiakdb.png",8c1a6fb03ef3d45a1f958fb3401e4264e409ff88c2a793061db7f29023454d0e,gemini-app,gemini-app-negative-2026-07-25
+gemini,"Gemini_Generated_Image_y48j3cy48j3cy48j.png","originals/Gemini_Generated_Image_y48j3cy48j3cy48j.png",45d79a683134fcba1b147b2aedb669783d474e1fb8a4df329729a0904fd1b46b,gemini-app,gemini-app-negative-2026-07-25

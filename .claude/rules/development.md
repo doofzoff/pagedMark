@@ -1,0 +1,139 @@
+---
+globs: ["src/**/*.py", "tests/**/*.py", "scripts/**/*.py", "pyproject.toml", "uv.lock", "maintain.sh", ".github/workflows/*.yml"]
+description: Command contracts, project gate, typing boundaries, model-adjacent test invariants, and the detection-path measurement rule.
+---
+
+# Development invariants
+
+## Command contracts
+
+Every single-image command declares `source` with `dir_okay=False`; `batch` declares its directory with `file_okay=False`. Keep `tests/test_cli_robustness.py::TestDirectoryInputIsRejected` as the regression guard.
+
+Exit-code and no-signal behavior is a public contract. Read the command-line section of [`../../docs/module-internals.md`](../../docs/module-internals.md) before changing it.
+
+Do not add an option whose only outcome is an error. Model id, step count and CFG are fixed by the profile, so none of them is a parameter of the CLI, `InvisibleEngine`, or `WatermarkRemover` -- they were accepted-then-rejected for a while, which moved the failure several frames below the caller and advertised choices the pinned stack cannot honor. If a value cannot vary, delete the knob rather than validating it.
+
+`device` is the deliberate exception and stays a library parameter: `None`/`"auto"` detect, `"cuda"` pins without detecting, and everything else raises at construction. It is not a CLI option, because the only value a user could usefully type is the one auto-detection already finds.
+
+The same rule applies to install hints: name the extra that actually makes the command work (`qwen-zimage`, not `diffusion`), and keep the printed command shell-quoted -- bare `pkg[extra]` is a glob in zsh.
+
+## Local gate
+
+Run `bash maintain.sh` from the repository root. The authoritative type gate is scoped to `src/`; full-project Pyright can exhaust Node memory on the ML dependency graph.
+
+Boundary modules for cv2, Torch, and Diffusers may carry narrow per-file relaxations for unknown third-party types. Keep pure-logic files strict, preserve the local piexif stub, and fix real errors before widening a pragma.
+
+From a worktree, `uv run` imports the package from the MAIN checkout -- that is where the editable install points. A script measuring a worktree's edit must insert that worktree's `src` at `sys.path[0]` and assert `module.__file__` resolves inside it, or it silently compares unmodified code against itself.
+
+## Model-adjacent tests
+
+Do not classify an entire module as untestable because its main path downloads a model. Keep pure behavior covered without downloads, including:
+
+- target-size selection in `test_invisible_engine.py`;
+- unsharp and adaptive-polish helpers in `test_humanizer.py`;
+- tiling geometry and blending in `test_tiling.py`;
+- prompt-embedding cache keying, storage round-trip, and the cross-pipeline reuse
+  that lets a stack load without its text encoder, in `test_qwen_zimage_pipeline.py`;
+- the face stack's dtype, in `test_qwen_zimage_pipeline.py`. A subclass that changes
+  the pipeline dtype for its own global model must not change the inherited face
+  stage's; `sdxl-zimage` shipped doing exactly that and crashed on every image with a
+  face. When one profile inherits another's stage, guard the invariants that stage
+  relies on, not just the code path.
+- the `InvisibleOptions` defaults, in `test_api.py`. When one signature promises to
+  mirror another, compare them field by field rather than pinning the values you happen
+  to know about, so the next field added on one side and not the other fails at the
+  seam. Two of these defaults drifted in practice and neither needed a GPU to catch;
+  the incident is recorded in `docs/module-internals.md`. Keep the comparison free of
+  an exception table: a field that needs one is a field that belongs elsewhere, which
+  is what `force` turned out to be.
+
+A defaults comparison is not a forwarding test, and the two fail differently. Pin the
+VALUE at the seam, not just the name -- `_run_invisible` passed the whole suite with
+`controlnet_conditioning_scale` hardcoded, because nothing asserted the caller's value
+arrived. `test_every_field_arrives_at_the_engine_with_the_caller_s_value` drives the
+real seam with every field set off its default, so one test covers the whole bag
+instead of one assertion per knob.
+
+Count the seams before believing a knob is covered. Each of `force` and
+`controlnet_conditioning_scale` reaches the engine through TWO paths -- `remove_all`
+versus `remove_batch(mode="all")` for the first, `_run_invisible` versus `_batch_engine`
+for the second -- and in both cases guarding one path left the other free to hardcode a
+constant with a green suite. The mode-parametrized guards in
+`TestRemoveBatchLibrary::test_force_reaches_the_scrub_gate_in_every_scrubbing_mode` and
+`TestBatchCommand::test_batch_controlnet_scale_flows_to_the_cached_engine` exist because
+that is what actually happened.
+
+Use availability checks only for paths that actually load large models.
+
+## One measurement, one gate seam
+
+A detector is split into a trust-level-blind scan and a verdict that applies the
+threshold, so `detect` and `detect_both` reach the same numbers by construction. Two
+rules follow, and both were broken in practice before they were written down:
+
+- A per-mark demotion goes in the `_post_gate` hook (or, for a whole-scan precondition
+  like LibLibAI's size floor, in `_scan`) -- never in a `detect` override. An override
+  is invisible to `detect_both`, so the RunningHub and Yuanbao anchor gates silently
+  stopped applying on the arbiter's perception path. `TestSinglePassPerception` is the
+  guard: it asserts `detect_both` equals two `detect` calls field for field.
+- Detection and the removal mask must read ONE sweep. The winning box travels on
+  `TextMarkDetection.match_box` and the registry threads the detection into the mask
+  builder; a mask path that re-runs its own sweep is how the two drift apart.
+
+The C2PA manifest-store JSON is NOT stable across reads: the reader regenerates manifest
+URNs and instance ids. Compare the derived `c2pa_info`, never the raw store.
+
+A third seam reaches the same verdict: `collect_metadata_record` ->
+`evidence_from_metadata_record` -> `identify_from_evidence`, the path a caller uses when
+collection and verdict run on different machines. Its contract is equality with
+`identify(path, check_visible=False, check_invisible=False)` on the same image, and it
+can break from EITHER side -- a region the collector stops walking, or a placement the
+file path learns to read and the record does not. `tests/test_metadata_record.py` pins
+it over the tracked fixtures; a separate local evaluation corpus catches placements the
+fixtures do not cover. Change either side and re-run both.
+
+Before changing anything in the detection path, record the detectors' exact verdicts
+over a local sample first and diff them after. A refactor here is only correct if that
+record is byte-identical, and a green test suite does not establish that on its own. A
+change that is meant to FIX detection is the exception that proves the rule: the diff
+must then be exactly the files you intended to change, named in advance.
+
+Two corollaries in `dwt_dct.py`, where "close enough" has an exact meaning. The bit test
+is `peak % 36 > 18.0` and for uint8 input the exact Haar value is a multiple of 0.5, so it
+lands ON the threshold once per 72 blocks and a 1-ulp difference flips real bits: leave the
+transform to `pywt` however slow it looks, because its C convolution contracts into an FMA
+that numpy has no ufunc for (`docs/module-internals.md` carries what that costs). And
+`tests/test_invisible_watermark.py` is `skipif(not is_available())` -- without the `detect`
+extra the upstream-parity test never runs, so a green suite is not evidence here and the
+verdict record is not optional.
+
+## A certified operating point is data, not a constant
+
+The video SynthID default is only meaningful as a row in
+`data/evaluations/video-synthid-oracle.csv`, so
+`test_shipped_defaults_match_a_certified_manifest_row` derives the pin from that
+manifest instead of restating literals. Pinning `noise_std` alone had let `long_side`
+and `fps` -- two thirds of what the oracle was actually shown -- move with a green
+suite.
+
+The certified profile is a perturbation-to-signal ratio, not a bare `noise_std`, so
+the latent scaling factor is gated in `load_video_vae_runtime`, carried on
+`VideoVaeRuntime`, and passed into encode and decode: the validated value and the
+applied value are one measurement. Anything that produces oracle evidence loads
+through that function. `video_synthid_sweep.py` hand-rolled the load and was the one
+path exempt from the gate it exists to feed, which is exactly backwards.
+
+Prove a video-path refactor the same way the detection path is proven, and without
+needing an oracle carrier: build a clip from a tracked fixture with ffmpeg, run the
+engine before and after, and require an identical output sha256. Keep the generated
+media outside the repository.
+
+Frame sampling is compared as `timestamp + 1e-9 >= next_sample_time`, so mutating
+that `>=` to `>` changes nothing and a green suite proves nothing. Mutate the phase
+or the period instead -- starting the accumulator half a period late shifts the
+selection by one frame while keeping the count identical, which is the drift a
+frame-count check cannot see and what
+`test_pairing_follows_the_engine_sampling_rule_not_just_the_frame_count` exists to
+catch.
+
+Environment setup, dependency recovery, CI behavior, and fixture policy: [`../../docs/development.md`](../../docs/development.md).
