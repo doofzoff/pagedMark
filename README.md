@@ -190,10 +190,6 @@ user-directed by design. See [scope, safety and legal notes](docs/legal-and-safe
 
 - [CLI guide](docs/cli.md) · [Python API](docs/python-api.md) ·
   [Installation](docs/installation.md)
-- [Module internals](docs/module-internals.md) — the design record, including the full
-  Apple Silicon measurement log behind every number on this page
-- [Known limitations](docs/known-limitations.md) ·
-  [Supported signals](docs/supported-signals.md)
 
 ## License
 
