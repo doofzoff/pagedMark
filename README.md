@@ -30,6 +30,27 @@ pagedmark invisible photo.png -o clean.png
 
 ---
 
+## Pipeline
+
+```mermaid
+flowchart LR
+    IN([input]) --> ID[identify<br/><i>what does it carry?</i>]
+
+    ID --> V[visible mark<br/>locate → mask → fill]
+    ID --> P[pixel watermark]
+    ID --> M[metadata<br/>C2PA · EXIF · XMP · IPTC]
+
+    P --> G[global regeneration<br/>SDXL + Canny ControlNet<br/><b>Metal</b> or CUDA]
+    G --> F[face repair<br/>YuNet → SAM → crop regen]
+
+    V --> OUT([clean output])
+    F --> OUT
+    M --> OUT
+```
+
+Each branch runs only where its signal was found, and each reports what it did. The two
+GPU stages are the only ones that need Metal; everything else runs on any machine.
+
 ## Capabilities
 
 | Signal | Approach | GPU |
