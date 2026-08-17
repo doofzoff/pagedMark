@@ -62,7 +62,7 @@ dependencies = [
     # synthetic/partial blobs the validator rejects. Binary wheel (Rust), but the
     # import is light (no torch/numpy) so it fits the dependency-light identify
     # host. Prebuilt wheels cover the full CI matrix (linux/macos/windows).
-    "c2pa-python>=0.35.0",
+    "c2pa-python>=0.37.7",
 ]
 
 [project.optional-dependencies]
@@ -83,7 +83,7 @@ visible = ["pagedmark[pixels]"]
 # VFR frames with explicit PTS before system ffmpeg encodes them.
 video = [
     "pagedmark[visible]",
-    "av>=18,<19",
+    "av>=18.1.0,<19",
 ]
 # Open DWT-DCT watermarks used by Stable Diffusion / SDXL / FLUX. The in-tree
 # decoder avoids the upstream invisible-watermark package's mandatory torch and
@@ -111,7 +111,7 @@ diffusion = [
     # ``RobertaProcessing.__new__() got an unexpected keyword argument 'cls'``.
     # Cap tokenizers to the stable 0.22 line (transformers 5.x accepts
     # >=0.22,<=0.23.0) so the rc is excluded while SDXL still loads.
-    "transformers>=5,<6",
+    "transformers>=5.15.0,<6",
     "tokenizers>=0.22,<0.23",
     "accelerate>=0.25.0",
     "safetensors",
@@ -123,7 +123,7 @@ diffusion = [
 # On Apple Silicon install `diffusion` instead; this extra adds nothing MPS can run.
 qwen-zimage = [
     "pagedmark[diffusion]",
-    "diffsynth>=2.0.17,<3",
+    "diffsynth>=2.1.2,<3",
     "torchvision>=0.20.0",
 ]
 # Opt-in verified-text reconstruction over qwen-zimage. LaMa removes the changed
@@ -166,7 +166,7 @@ dev = [
     "pytest-cov>=4.1.0",
     "pytest-xdist>=3.5.0",
     "packaging>=24.0",
-    "ruff>=0.4.0",
+    "ruff>=0.16.3",
     "pyright>=1.1.0",
     "invisible-watermark>=0.2.0",
 ]
