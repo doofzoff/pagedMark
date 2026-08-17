@@ -17,8 +17,8 @@ jobs:
     name: build the distribution
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
       - run: uv build
       # A wheel that ships without its licence and attribution notices is not
       # redistributable, and the check costs nothing.
@@ -35,7 +35,7 @@ jobs:
                   sys.exit(f"{required} is missing from the built artifacts")
           print("LICENSE and NOTICE present in both artifacts")
           PY
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
@@ -48,7 +48,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist/
