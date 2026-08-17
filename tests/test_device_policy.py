@@ -80,13 +80,14 @@ class TestFaceStagePolicy:
         assert face_stage_uses_zimage(CUDA_DEVICE)
         assert not face_stage_uses_zimage(MPS_DEVICE)
 
-    def test_the_face_strength_floor_is_a_numerical_limit_not_a_preference(self):
-        """Below it the fp16 crop path stops producing an image.
+    def test_the_face_strength_floor_is_a_mitigation_with_a_measurement_behind_it(self):
+        """At 0.025 three of four crops came back empty; at 0.05, none did.
 
-        Upstream's policy resolves to 0.025 for the measured photo; at that value three
-        of four faces came back at ~12 dB PSNR against the source, while 0.05 produced
-        30.5 dB. The clamp is what keeps a small-face image from silently returning
-        garbage, so it is pinned rather than tuned.
+        Identical crop sizes, so strength moves this. It is not the numerical floor it
+        first looked like: the same silent-zero failure was later reproduced at 0.05 by
+        freeing 1.5 GiB of unrelated memory, which makes strength one trigger of a Metal
+        fp16 instability rather than its cause. The clamp is kept as a mitigation and the
+        guard in the face stage is the actual protection.
         """
         from pagedmark._internal.watermark_profiles import (
             SDXL_FACE_STRENGTH_FLOOR,

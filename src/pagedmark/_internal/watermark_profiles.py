@@ -66,11 +66,14 @@ ZIMAGE_FACE_DEVICES = (CUDA_DEVICE,)
 # - the crop cap. Upstream scales a crop toward a 768px face guide and caps it at
 #   1024. For a 120px face that is memory spent on detail the face does not carry, and
 #   on a 16 GiB Mac it is the difference between 1.5 s/step and 19 s/step.
-# - the strength floor. Below it, fp16 sampling at the very tail of the schedule stops
-#   producing an image: at the 0.025 that upstream's policy resolves to for this photo,
-#   three of four faces came back at ~12 dB PSNR against the source (garbage), while
-#   0.05 produced 30.5 dB. The floor is a numerical limit of the fp16 path, not a
-#   quality preference.
+# - the strength floor. At the 0.025 the inherited policy resolves to for a photo of
+#   small faces, three of four crops came back as all-zero rectangles while 0.05
+#   produced 30.5 dB PSNR at identical crop sizes -- so strength moves this, and the
+#   floor stays. It is NOT the numerical limit it first looked like, though: the same
+#   silent-zero failure was later reproduced at 0.05 by nothing more than freeing 1.5 GiB
+#   of unrelated memory, which makes strength one trigger of a Metal fp16 instability
+#   rather than its cause. The floor is a mitigation; the guard in `_run_faces` is the
+#   protection.
 # - the step count, which is the Z-Image stage's own and needs no change: a crop is
 #   small enough that more steps cost little, and 8 measured well.
 SDXL_FACE_CROP_CAP = 640
