@@ -522,9 +522,7 @@ class TestAllCommand:
             patch("pagedmark.cli.InvisibleEngine", mock_cls, create=True),
             patch("pagedmark.invisible_engine.InvisibleEngine", mock_cls),
             patch("pagedmark.invisible_engine.is_available", return_value=True),
-            patch(
-                "pagedmark.watermark_registry.remove_auto_marks", side_effect=_fake_remove_auto
-            ) as mock_auto,
+            patch("pagedmark.watermark_registry.remove_auto_marks", side_effect=_fake_remove_auto) as mock_auto,
         ):
             result = runner.invoke(main, ["all", str(sample_png), "-o", str(output), "--force"])
         assert result.exit_code == 0, result.output

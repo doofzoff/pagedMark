@@ -332,3 +332,41 @@ def test_stream_batches_consumes_only_one_batch_ahead() -> None:
 
     assert next(iter(batches)) == [0, 1]
     assert consumed == [0, 1]
+
+
+class TestDeviceResolution:
+    """The video path resolves its device through the same probe the image path uses."""
+
+    def test_auto_defers_to_the_probed_resolver(self, monkeypatch):
+        """A build flag is not a working backend, and this path used to trust the flag.
+
+        ``torch.cuda.is_available()`` and ``torch.backends.mps.is_available()`` both
+        report what the build supports, not what the driver will execute; either can
+        return True on a machine whose first real tensor raises. Sharing the image
+        path's resolver means the video runtime inherits its op probe instead of
+        discovering the failure inside the VAE load.
+        """
+        from pagedmark import video_invisible
+        from pagedmark._internal import watermark_remover
+
+        monkeypatch.setattr(watermark_remover, "get_device", lambda: "mps")
+
+        assert video_invisible._pick_device("auto") == "mps"
+
+    def test_an_explicit_device_is_probed_before_it_is_accepted(self, monkeypatch):
+        from pagedmark import video_invisible
+
+        monkeypatch.setattr("pagedmark._internal.watermark_remover._mps_available", lambda: True)
+        monkeypatch.setattr("pagedmark._internal.watermark_remover._backend_works", lambda device: False)
+
+        with pytest.raises(RuntimeError, match="MPS was requested"):
+            video_invisible._pick_device("mps")
+
+    def test_a_working_explicit_device_is_returned_unchanged(self, monkeypatch):
+        """The discriminating half: the guard must accept a backend that works."""
+        from pagedmark import video_invisible
+
+        monkeypatch.setattr("pagedmark._internal.watermark_remover._mps_available", lambda: True)
+        monkeypatch.setattr("pagedmark._internal.watermark_remover._backend_works", lambda device: True)
+
+        assert video_invisible._pick_device("mps") == "mps"

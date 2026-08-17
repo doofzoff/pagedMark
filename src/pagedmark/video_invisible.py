@@ -102,17 +102,25 @@ def _fit_size(width: int, height: int, long_side: int) -> tuple[int, int]:
 
 
 def _pick_device(requested: str) -> str:
+    """Resolve the inference device, probing a candidate before trusting it.
+
+    ``auto`` defers to the image path's resolver, which runs one real op on each
+    candidate: ``torch.cuda.is_available()`` and ``torch.backends.mps.is_available()``
+    are build flags and both can report a backend that raises on the first tensor. An
+    explicitly requested device is still checked, so a wrong ``--device`` fails here
+    rather than inside the VAE load.
+    """
     import torch
 
+    from pagedmark._internal.watermark_remover import _backend_works, _mps_available
+
     if requested == "auto":
-        if torch.cuda.is_available():
-            return "cuda"
-        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            return "mps"
-        return "cpu"
-    if requested == "cuda" and not torch.cuda.is_available():
+        from pagedmark._internal.watermark_remover import get_device
+
+        return get_device()
+    if requested == "cuda" and not (torch.cuda.is_available() and _backend_works("cuda")):
         raise RuntimeError("CUDA was requested but is not available")
-    if requested == "mps" and not (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()):
+    if requested == "mps" and not (_mps_available() and _backend_works("mps")):
         raise RuntimeError("MPS was requested but is not available")
     return requested
 

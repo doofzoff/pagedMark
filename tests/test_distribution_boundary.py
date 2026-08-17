@@ -26,5 +26,3 @@ def test_sdist_has_explicit_public_boundary() -> None:
         "/pyproject.toml",
     }
     assert {"/data", "/tmp", "/.sc"} <= _array_values(sdist_config, "exclude")
-
-
