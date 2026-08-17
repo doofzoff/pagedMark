@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 import cv2
 import numpy as np
 
+from pagedmark._internal.watermark_remover import empty_device_cache
 from pagedmark.video_encoding import (
     abort_raw_video_encoder,
     finish_raw_video_encoder,
@@ -298,6 +299,7 @@ def _encode_frame_latents(
             tensor = tensor.to(device=device, dtype=vae.dtype) / 127.5 - 1.0
             latents = vae.encode(tensor).latent_dist.mode() * scaling_factor
             latent_batches.append(latents)
+            empty_device_cache(device)
     return latent_batches
 
 
@@ -308,6 +310,7 @@ def _decode_frame_latents(
     noise_std: float,
     shared_noise: Any,
     scaling_factor: float,
+    device: str,
 ) -> list[np.ndarray]:
     """Decode cached latents with one perturbation shared across time."""
     import torch
@@ -320,6 +323,7 @@ def _decode_frame_latents(
             decoded = ((decoded / 2.0 + 0.5).clamp(0.0, 1.0) * 255.0).round().to(torch.uint8)
             decoded = decoded.permute(0, 2, 3, 1).cpu().numpy()
             output.extend(np.ascontiguousarray(frame[:, :, ::-1]) for frame in decoded)
+            empty_device_cache(device)
     return output
 
 
@@ -458,6 +462,7 @@ def regenerate_video_candidate(
                     noise_std=noise_std,
                     shared_noise=shared_noise,
                     scaling_factor=runtime.scaling_factor,
+                    device=resolved_device,
                 )
                 for reference, candidate in zip(frames, regenerated, strict=True):
                     frame_pipe.write(candidate.tobytes())

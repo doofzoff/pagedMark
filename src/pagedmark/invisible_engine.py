@@ -238,8 +238,7 @@ class InvisibleEngine:
 
             if not region_eraser.lama_available():
                 raise RuntimeError(
-                    "Verified text restoration requires LaMa. Install: "
-                    "pip install 'pagedmark[text-restoration]'"
+                    "Verified text restoration requires LaMa. Install: pip install 'pagedmark[text-restoration]'"
                 )
 
         from PIL import Image, ImageOps

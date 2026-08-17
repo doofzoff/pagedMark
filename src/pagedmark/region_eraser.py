@@ -351,8 +351,7 @@ def erase(
         # fallback tests, and a table of bound references would not see those patches.
         if not globals()[learned.available]():
             raise RuntimeError(
-                f"{learned.label} backend requires onnxruntime. "
-                f"Install the extra: pip install 'pagedmark[{backend}]'"
+                f"{learned.label} backend requires onnxruntime. Install the extra: pip install 'pagedmark[{backend}]'"
             )
         return globals()[learned.erase](image_bgr, mask)
     # cv2 and anything unrecognized (including "auto", which a library caller may pass
