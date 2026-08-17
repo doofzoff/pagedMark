@@ -96,6 +96,25 @@ Metal answers an oversized allocation by paging rather than failing, so a run th
 - **Attention slicing always on**, the device cache released between passes, and noise
   drawn on a CPU generator so one seed means one result across machines.
 
+### Video runs here too
+
+Video is not a CUDA-only corner of this project. Visible mark removal and metadata
+stripping need no GPU at all, and SynthID regeneration — a VAE round-trip with one
+latent-noise field shared across time — resolves to Metal through the same probed device
+ladder as the image path, releasing the device cache per frame batch so a clip's peak
+stays at one batch instead of growing with its length.
+
+```bash
+pagedmark video identify clip.mp4      # what the container and pixels carry
+pagedmark video all clip.mp4 -o clean.mp4   # visible marks + metadata, CPU
+pagedmark video invisible clip.mp4 -o clean.mp4   # SynthID regeneration, Metal
+```
+
+Audio is copied without re-encoding, variable frame intervals survive through a
+timestamped bridge rather than being flattened, and the completed encode is published
+atomically. The regeneration profile's own numbers were measured on CUDA; the Metal path
+runs the same graph, and the wall time is the difference to expect.
+
 ### Metal has numerical floors
 
 Below a face strength of 0.05 the fp16 path stops producing an image: three of four
