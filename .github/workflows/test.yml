@@ -1,0 +1,52 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Apple hardware is the primary target, so it is what the gate runs on. The runners
+  # have no usable Metal device for a 10 GB model stack, and they do not need one: the
+  # device policies, memory thresholds, samplers and guards are pure functions precisely
+  # so they are decidable without a GPU. The model-loading tests skip themselves.
+  apple:
+    name: macos-arm64 · py${{ matrix.python }}
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Sync the development environment
+        run: uv sync --frozen --extra dev --python ${{ matrix.python }}
+      - name: Lint
+        run: uv run ruff check
+      - name: Format
+        run: uv run ruff format --check
+      - name: Types
+        run: uv run pyright src/
+      - name: Tests
+        run: uv run pytest -n auto
+
+  # The metadata, provenance and visible-mark paths carry no Metal in them and users run
+  # them on Linux, so they are covered there too rather than assumed.
+  portable:
+    name: ubuntu · py3.12
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - run: uv run pytest -n auto
