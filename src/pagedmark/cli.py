@@ -1365,6 +1365,77 @@ def cmd_video_batch(
         raise SystemExit(1)
 
 
+# ── Fidelity measurement ──
+@main.command("measure")
+@click.argument("source", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.argument("candidate", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--no-faces", is_flag=True, help="Skip per-face rows (also skips the face-detector download).")
+@click.option("--json", "as_json", is_flag=True, help="Emit the report as JSON instead of a table.")
+def cmd_measure(source: Path, candidate: Path, no_faces: bool, as_json: bool) -> None:
+    """Measure what a removal run cost the picture.
+
+    Compares a cleaned output against its original on the three numbers this project
+    chose its own operating points with: PSNR over the frame, PSNR per detected face,
+    and how much mid-band structure appeared where the source was flat and dark.
+
+    Needs no GPU and loads no diffusion model.
+    """
+    import json as json_module
+
+    from pagedmark import fidelity
+
+    report = fidelity.compare(source, candidate, faces=not no_faces)
+
+    if as_json:
+        # Infinite PSNR means the two files are pixel-identical, and Python would emit it
+        # as the bare token `Infinity`, which strict JSON parsers reject. The condition
+        # travels as a boolean instead, so the payload stays machine-readable.
+        def _finite(value: float | None) -> float | None:
+            import math
+
+            return None if value is None or math.isinf(value) else value
+
+        console.print(
+            json_module.dumps(
+                {
+                    "width": report.width,
+                    "height": report.height,
+                    "identical": report.psnr == float("inf"),
+                    "psnr": _finite(report.psnr),
+                    "face_psnr": _finite(report.face_psnr),
+                    "faces": [{"box": list(face.box), "psnr": _finite(face.psnr)} for face in report.faces],
+                    "invented_texture": report.invented_texture,
+                },
+                indent=2,
+                allow_nan=False,
+            )
+        )
+        return
+
+    console.print(f"  Source:    {source.name}  ({report.width}x{report.height})")
+    console.print(f"  Candidate: {candidate.name}")
+    console.print(f"\n  Whole frame:      {report.psnr:.2f} dB")
+    if report.faces:
+        console.print(f"  Faces ({len(report.faces)}):        {report.face_psnr:.2f} dB mean")
+        for index, face in enumerate(report.faces, start=1):
+            x1, y1, x2, y2 = face.box
+            console.print(f"    face {index}  {x2 - x1}x{y2 - y1} px  {face.psnr:.2f} dB")
+    elif not no_faces:
+        console.print("  Faces:            none detected")
+    if report.invented_texture is None:
+        console.print("  Invented texture: no flat, dark region large enough to measure")
+    else:
+        console.print(f"  Invented texture: {report.invented_texture:.2f}x the source")
+
+    # A number without a reading is a number the user has to guess at. These two are
+    # the boundaries the project's own decisions were made against.
+    console.print(
+        "\n  A frame PSNR near 30 dB is a normal regeneration; faces move further than the\n"
+        "  frame does. Invented texture at 1.0 means the flat regions came back as flat as\n"
+        "  they started -- the regression this metric exists for read 1.24x."
+    )
+
+
 # ── Provenance identification ──
 @main.command("identify")
 @click.argument("source", type=click.Path(exists=True, dir_okay=False, path_type=Path))

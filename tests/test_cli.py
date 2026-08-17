@@ -1202,3 +1202,61 @@ def test_unreadable_input_exits_cleanly(runner, tmp_path, name, content, cmd):
     else:
         assert result.exit_code == 1, result.output  # cannot remove a mark from unreadable input
         assert "Error" in result.output
+
+
+class TestMeasureCommand:
+    """The fidelity report is the one command that must work with no GPU and no models."""
+
+    @staticmethod
+    def _pair(tmp_path: Path, damage: bool) -> tuple[Path, Path]:
+        rng = np.random.default_rng(0)
+        frame = np.clip(np.full((256, 256, 3), 24, np.float32) + rng.normal(0, 3, (256, 256, 3)), 0, 255)
+        source = tmp_path / "source.png"
+        candidate = tmp_path / "candidate.png"
+        cv2.imwrite(str(source), frame.astype(np.uint8))
+        output = frame.copy()
+        if damage:
+            output[40:120, 40:120] = 200
+        cv2.imwrite(str(candidate), output.astype(np.uint8))
+        return source, candidate
+
+    def test_reports_the_three_numbers(self, runner, tmp_path):
+        source, candidate = self._pair(tmp_path, damage=True)
+
+        result = runner.invoke(main, ["measure", str(source), str(candidate), "--no-faces"])
+
+        assert result.exit_code == 0, result.output
+        assert "Whole frame" in result.output
+        assert "Invented texture" in result.output
+
+    def test_json_is_strictly_parseable_even_for_an_identical_pair(self, runner, tmp_path):
+        """`Infinity` is what Python emits for identical files, and strict parsers reject it.
+
+        So the identical case travels as a boolean with a null PSNR. This test exists
+        because the first version of the command emitted the bare token.
+        """
+        source, _ = self._pair(tmp_path, damage=False)
+
+        result = runner.invoke(main, ["measure", str(source), str(source), "--no-faces", "--json"])
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        assert payload["identical"] is True
+        assert payload["psnr"] is None
+        assert payload["invented_texture"] == pytest.approx(1.0)
+
+    def test_no_faces_skips_the_detector_entirely(self, runner, tmp_path):
+        """--no-faces is also how a user avoids the detector's model download."""
+        source, candidate = self._pair(tmp_path, damage=True)
+        with patch("pagedmark.fidelity._detected_faces", side_effect=AssertionError("detector was called")):
+            result = runner.invoke(main, ["measure", str(source), str(candidate), "--no-faces"])
+
+        assert result.exit_code == 0, result.output
+        assert "face 1" not in result.output
+
+    def test_a_missing_file_is_refused_by_the_argument(self, runner, tmp_path):
+        source, _ = self._pair(tmp_path, damage=False)
+
+        result = runner.invoke(main, ["measure", str(source), str(tmp_path / "absent.png")])
+
+        assert result.exit_code != 0
