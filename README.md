@@ -32,7 +32,7 @@ pagedmark invisible photo.png -o clean.png
 | **Invisible pixel watermarks** — SynthID-class marks from gpt-image, Gemini, Nano Banana | Structure-guided diffusion regeneration disrupts the embedded pattern | Metal or CUDA |
 | **Visible AI labels** — Gemini sparkle, Doubao, Jimeng, Qwen, Kling, Yuanbao, Baidu, LibLibAI, Samsung Galaxy AI | Located in its expected region, masked, and filled | None |
 | **Provenance metadata** — C2PA Content Credentials, EXIF, XMP, IPTC, generator parameters, TC260 AIGC tags | Format-aware stripping that never recompresses the image | None |
-| **Video** — Sora, Veo, Seedance, Dola, Hailuo, Kling marks, and video SynthID | Per-frame removal with audio copied untouched and timestamps preserved | Depends on mode |
+| **Video** — Sora, Veo, Seedance, Dola, Hailuo, Kling marks, and video SynthID | Per-frame removal with audio copied untouched and timestamps preserved | None for marks and metadata; Metal or CUDA for SynthID |
 | **Region erase** — anything you point at | User-directed inpainting with OpenCV, MI-GAN, or LaMa | None |
 
 Always start by asking what a file actually carries:
@@ -169,6 +169,8 @@ pagedmark batch ./photos --mode all
 # Video
 pagedmark video identify clip.mp4
 pagedmark video all clip.mp4 -o clean.mp4
+pagedmark video invisible clip.mp4 -o clean.mp4
+pagedmark video batch ./clips --mode all
 ```
 
 The device is detected and the pipeline follows from it. Both are printed before the run
