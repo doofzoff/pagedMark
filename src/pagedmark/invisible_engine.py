@@ -90,6 +90,10 @@ class InvisibleEngine:
     to break watermark patterns, and reconstructs via reverse diffusion.
     """
 
+    # Class-level default so an instance built without __init__ -- which the tests do, to
+    # exercise the pure logic without a model -- still answers this.
+    _preview = False
+
     def __init__(
         self,
         device: str | None = None,
@@ -98,6 +102,7 @@ class InvisibleEngine:
         progress_callback: Callable[[str], None] | None = None,
         controlnet_conditioning_scale: float = 1.0,
         cpu_offload: bool = False,
+        preview: bool = False,
     ) -> None:
         """Initialize the invisible watermark removal engine.
 
@@ -118,6 +123,10 @@ class InvisibleEngine:
             progress_callback: Optional callback for progress messages.
             controlnet_conditioning_scale: Canny ControlNet structure-preservation
                 strength on the global stage of both profiles.
+            preview: Produce a fast, lower-resolution look at what the run will do
+                rather than a finished result. Caps the frame and the face crops
+                together, because capping the frame alone leaves the face stage costing
+                what it costs at full size.
             cpu_offload: Offload model components to CPU between CUDA calls instead
                 of keeping the whole pipeline in VRAM, at the cost of speed. For
                 qwen-zimage, force the face stack to offload instead of using automatic
@@ -133,7 +142,9 @@ class InvisibleEngine:
             pipeline=pipeline,
             controlnet_conditioning_scale=controlnet_conditioning_scale,
             cpu_offload=cpu_offload,
+            preview=preview,
         )
+        self._preview = preview
         self._progress_callback = progress_callback
 
     @property
@@ -265,6 +276,10 @@ class InvisibleEngine:
 
         # Both profiles run at the input's native geometry, so only the explicit max
         # cap can move it, and it can only ever scale down.
+        if self._preview and max_resolution == 0:
+            from ._internal.watermark_profiles import PREVIEW_LONG_SIDE
+
+            max_resolution = PREVIEW_LONG_SIDE
         target = _target_size(image.width, image.height, max_resolution)
         if target is not None:
             if self._progress_callback:

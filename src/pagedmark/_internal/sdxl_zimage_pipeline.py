@@ -39,6 +39,7 @@ from pagedmark._internal.watermark_profiles import (
     CONTROLNET_CANNY_MODEL,
     CPU_DEVICE,
     MPS_DEVICE,
+    PREVIEW_FACE_CROP_CAP,
     PROFILE_DEVICES,
     SDXL_FACE_CROP_CAP,
     SDXL_FACE_STEPS,
@@ -231,7 +232,9 @@ class SdxlZImagePipeline(QwenZImagePipeline):
 
     def _face_crop_cap(self) -> int | None:
         """Cap the crop where the crop's size, not the face's, decides the wall time."""
-        return None if face_stage_uses_zimage(self.device) else SDXL_FACE_CROP_CAP
+        if face_stage_uses_zimage(self.device):
+            return None
+        return PREVIEW_FACE_CROP_CAP if self.preview else SDXL_FACE_CROP_CAP
 
     def _release_sam_if_transient(self) -> None:
         """On Metal, SAM and the SDXL stack do not fit next to each other comfortably."""

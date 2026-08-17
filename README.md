@@ -170,6 +170,18 @@ pass is. 1.5 GiB is not worth a black rectangle over someone's face, and the off
 path does not need it. A guard now drops any empty crop and keeps the global stage's face
 instead, whatever produced it.
 
+### A preview, sized to be worth running
+
+`--preview` answers "what will this do to my picture" before the real run. It caps the
+frame at 512 px, shrinks the face crops with it, and repairs the largest face only —
+because capping the frame alone changes nothing: the face stage scales every crop toward
+a 768 px guide regardless of the frame, so a naive preview cost 66 s against the real
+run's 113 s. With all three caps it is **46.6 s against 112.6 s** on the measured photo.
+
+It writes `<source>_preview.png`, never the `_clean` name, and prints what it is. Its
+fidelity numbers are not the run's numbers: a preview shows character, not final quality,
+because the downscale and upscale are part of what you are looking at.
+
 ### Metal has numerical floors
 
 Below a face strength of 0.05 the fp16 path stops producing an image: three of four
@@ -214,6 +226,9 @@ pagedmark metadata photo.png --remove -o clean.png
 
 # Erase a region you choose
 pagedmark erase photo.png --region 1640,1930,400,100 -o clean.png
+
+# A faster, lower-resolution look before committing to the real run
+pagedmark invisible photo.png --preview
 
 # The full pipeline: visible → invisible → metadata
 pagedmark all photo.png -o clean.png

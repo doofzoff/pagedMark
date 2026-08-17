@@ -162,6 +162,10 @@ def empty_device_cache(device: str) -> None:
 class WatermarkRemover:
     """Load one regeneration profile and write a metadata-clean raster output."""
 
+    # Class-level default for the same reason as in the engine: hand-built instances in
+    # the tests bypass __init__ on purpose.
+    preview = False
+
     def __init__(
         self,
         device: str | None = None,
@@ -170,6 +174,7 @@ class WatermarkRemover:
         pipeline: str | None = None,
         controlnet_conditioning_scale: float = 1.0,
         cpu_offload: bool = False,
+        preview: bool = False,
     ) -> None:
         # There is no ``model_id`` parameter and no ``model_id`` attribute: each
         # profile pins a fixed model stack, and the dtype below is bound to that
@@ -203,6 +208,7 @@ class WatermarkRemover:
             self.torch_dtype = torch.bfloat16  # type: ignore[union-attr]
 
         self.cpu_offload = cpu_offload
+        self.preview = preview
         self.controlnet_conditioning_scale = controlnet_conditioning_scale
         self.hf_token = hf_token or os.environ.get("HF_TOKEN")
         self._progress_callback = progress_callback
@@ -232,6 +238,7 @@ class WatermarkRemover:
                 keep_face_models_on_device=False if self.cpu_offload else None,
                 keep_global_models_on_device=False if self.cpu_offload else None,
                 face_stage=self.face_stage,
+                preview=self.preview,
             )
         return self._qwen_zimage_pipeline
 

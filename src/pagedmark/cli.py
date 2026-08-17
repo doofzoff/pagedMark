@@ -320,6 +320,13 @@ _max_resolution_option = click.option(
     default=0,
     help="Cap long side (px) before diffusion; 0 = native and preserves the most detail. Raise only on GPU OOM.",
 )
+_preview_option = click.option(
+    "--preview",
+    is_flag=True,
+    default=False,
+    help="Fast, lower-resolution look at what the run will do -- not a finished result. "
+    "Writes <source>_preview.<ext> unless -o says otherwise.",
+)
 _force_option = click.option(
     "--force/--no-force",
     default=False,
@@ -824,6 +831,7 @@ def cmd_erase(
 @_unsharp_option
 @_adaptive_polish_option
 @_tile_options
+@_preview_option
 @_force_option
 @_cpu_offload_option
 @_text_manifest_option
@@ -844,6 +852,7 @@ def cmd_invisible(
     tile: bool,
     tile_size: int,
     tile_overlap: int,
+    preview: bool,
     force: bool,
     cpu_offload: bool,
     text_manifest: Path | None,
@@ -860,7 +869,9 @@ def cmd_invisible(
 
     source = _validate_image(source)
     if output is None:
-        output = source.with_stem(source.stem + "_clean")
+        # A preview must never look like the result. Its own suffix is what keeps a
+        # 512px look from being mistaken for -- or overwriting -- the finished file.
+        output = source.with_stem(source.stem + ("_preview" if preview else "_clean"))
 
     # Gate BEFORE building the engine: skip the destructive regeneration when no
     # invisible AI watermark is locally detectable (it would only degrade a clean
@@ -882,6 +893,7 @@ def cmd_invisible(
             progress_callback=progress_cb,
             controlnet_conditioning_scale=controlnet_scale,
             cpu_offload=cpu_offload,
+            preview=preview,
         )
     except ValueError as exc:
         console.print(f"  Error: {exc}")
@@ -895,6 +907,13 @@ def cmd_invisible(
     # chooses, and printing the request would name a profile that never ran.
     console.print(f"  Pipeline: {engine.profile} on {engine.device}")
     console.print(f"  Strength: {_resolved_strength_for_display(source, strength, vendor, engine.profile)}")
+    if preview:
+        from pagedmark._internal.watermark_profiles import PREVIEW_LONG_SIDE
+
+        console.print(
+            f"  Preview:  capped at {PREVIEW_LONG_SIDE}px with smaller face crops. This is a look at the\n"
+            "            tradeoff, not a result -- rerun without --preview for the real output."
+        )
 
     t0 = time.monotonic()
     try:

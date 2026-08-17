@@ -1260,3 +1260,46 @@ class TestMeasureCommand:
         result = runner.invoke(main, ["measure", str(source), str(tmp_path / "absent.png")])
 
         assert result.exit_code != 0
+
+
+class TestPreviewFlag:
+    """A preview must be unmistakable for the result, and cheaper than it."""
+
+    def test_it_writes_its_own_file_rather_than_the_clean_one(self, runner, sample_png, tmp_path):
+        """Overwriting <source>_clean.png with a 512px look would be the worst outcome."""
+        mock_cls, _engine = _mock_invisible_engine()
+        with (
+            patch("pagedmark.cli.InvisibleEngine", mock_cls, create=True),
+            patch("pagedmark.invisible_engine.InvisibleEngine", mock_cls),
+            patch("pagedmark.invisible_engine.is_available", return_value=True),
+            patch("pagedmark.cli._should_skip_invisible_scrub", return_value=False, create=True),
+        ):
+            result = runner.invoke(main, ["invisible", str(sample_png), "--preview", "--force"])
+
+        assert result.exit_code == 0, result.output
+        assert sample_png.with_stem(sample_png.stem + "_preview").exists()
+        assert not sample_png.with_stem(sample_png.stem + "_clean").exists()
+
+    def test_it_reaches_the_engine_and_says_what_it_is(self, runner, sample_png):
+        mock_cls, _engine = _mock_invisible_engine()
+        with (
+            patch("pagedmark.cli.InvisibleEngine", mock_cls, create=True),
+            patch("pagedmark.invisible_engine.InvisibleEngine", mock_cls),
+            patch("pagedmark.invisible_engine.is_available", return_value=True),
+        ):
+            result = runner.invoke(main, ["invisible", str(sample_png), "--preview", "--force"])
+
+        assert mock_cls.call_args.kwargs["preview"] is True
+        assert "not a result" in result.output
+
+    def test_without_the_flag_nothing_changes(self, runner, sample_png):
+        mock_cls, _engine = _mock_invisible_engine()
+        with (
+            patch("pagedmark.cli.InvisibleEngine", mock_cls, create=True),
+            patch("pagedmark.invisible_engine.InvisibleEngine", mock_cls),
+            patch("pagedmark.invisible_engine.is_available", return_value=True),
+        ):
+            result = runner.invoke(main, ["invisible", str(sample_png), "--force"])
+
+        assert mock_cls.call_args.kwargs["preview"] is False
+        assert "Preview:" not in result.output

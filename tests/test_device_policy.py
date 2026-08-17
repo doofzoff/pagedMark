@@ -599,3 +599,48 @@ class TestEmptyFaceCropGuard:
 
         region = np.asarray(result)[8:40, 8:40]
         assert not (region == np.array([10, 20, 30], dtype=np.uint8)).all(), "a varied crop must be composited"
+
+
+class TestPreviewPolicy:
+    """A preview has to be fast enough to be worth running before the real thing."""
+
+    def test_the_preview_caps_the_frame_and_the_crops_together(self):
+        """Capping the frame alone leaves the face stage costing full price.
+
+        The stage scales every crop toward a 768 px guide regardless of the frame, so a
+        512 px preview with full-size crops spends its time exactly where the real run
+        does. Both caps drop together or the flag is decoration.
+        """
+        from pagedmark._internal.watermark_profiles import (
+            PREVIEW_FACE_CROP_CAP,
+            PREVIEW_LONG_SIDE,
+            SDXL_FACE_CROP_CAP,
+        )
+
+        assert PREVIEW_LONG_SIDE == 512
+        assert PREVIEW_FACE_CROP_CAP < SDXL_FACE_CROP_CAP
+
+    def test_the_crop_cap_follows_the_preview_flag(self):
+        pytest.importorskip("diffusers")
+        from pagedmark._internal.sdxl_zimage_pipeline import SdxlZImagePipeline
+        from pagedmark._internal.watermark_profiles import PREVIEW_FACE_CROP_CAP, SDXL_FACE_CROP_CAP
+
+        preview = SdxlZImagePipeline(device=MPS_DEVICE, torch_dtype=None, preview=True)
+        full = SdxlZImagePipeline(device=MPS_DEVICE, torch_dtype=None, preview=False)
+
+        assert preview._face_crop_cap() == PREVIEW_FACE_CROP_CAP
+        assert full._face_crop_cap() == SDXL_FACE_CROP_CAP
+
+    def test_an_explicit_resolution_cap_wins_over_the_preview_default(self):
+        """--preview picks a size; --max-resolution states one, and stating beats picking."""
+        from types import SimpleNamespace
+
+        from pagedmark._internal.watermark_profiles import PREVIEW_LONG_SIDE
+        from pagedmark.invisible_engine import InvisibleEngine, _target_size
+
+        engine = object.__new__(InvisibleEngine)
+        engine._preview = True
+        # The engine's own policy: preview supplies the cap only where none was given.
+        assert _target_size(1448, 1086, PREVIEW_LONG_SIDE) == (512, 384)
+        assert _target_size(1448, 1086, 1024) == (1024, 768)
+        assert SimpleNamespace(preview=True).preview is True

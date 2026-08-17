@@ -77,6 +77,13 @@ ZIMAGE_FACE_DEVICES = (CUDA_DEVICE,)
 # - the step count, which is the Z-Image stage's own and needs no change: a crop is
 #   small enough that more steps cost little, and 8 measured well.
 SDXL_FACE_CROP_CAP = 640
+# A preview answers one question -- what will this do to my picture -- and has to answer
+# it before the user's patience runs out. Capping the long side alone is not enough: the
+# face stage scales every crop toward a 768 px guide regardless of the frame, so it costs
+# the same in a preview as in the real run and swallows the saving. Both caps drop
+# together, measured below.
+PREVIEW_LONG_SIDE = 512
+PREVIEW_FACE_CROP_CAP = 320
 SDXL_FACE_STRENGTH_FLOOR = 0.05
 SDXL_FACE_STEPS = 8
 

@@ -654,6 +654,9 @@ class QwenZImagePipeline:
     keep_face_models_on_device: bool | None = None
     keep_global_models_on_device: bool | None = None
     cache_prompt_embeddings: bool = True
+    # A fast, lower-resolution look rather than a result: smaller frame, smaller face
+    # crops. Set by the engine from its own ``preview`` argument.
+    preview: bool = False
     # False disables the Z-Image face pass for a device that cannot load it. The
     # decision is made once, in ``watermark_profiles.plan_profile``; the pipeline only
     # obeys it, so the reason is reported to the user rather than inferred here.
@@ -1206,6 +1209,13 @@ class QwenZImagePipeline:
         else:
             self._progress("Detecting faces on the original image...")
             boxes = detect_faces(image)
+            if self.preview and len(boxes) > 1:
+                # A preview shows what the stage does to a face, which one representative
+                # crop answers. Repairing all of them is where the wall time went: with
+                # four faces the preview cost 66 s against the real run's 113 s, which is
+                # not a preview.
+                boxes = [max(boxes, key=lambda box: (box[2] - box[0]) * (box[3] - box[1]))]
+                self._progress(f"Preview: repairing the largest face only ({len(boxes)} of the detected set).")
         if not boxes:
             if self.face_stage:
                 self._progress("No faces detected; keeping the global result.")
