@@ -141,6 +141,27 @@ timestamped bridge rather than being flattened, and the completed encode is publ
 atomically. The regeneration profile's own numbers were measured on CUDA; the Metal path
 runs the same graph, and the wall time is the difference to expect.
 
+### 8 GB Macs are a supported target, not a rounding error
+
+The stack is 7.7 GiB of weights once the text encoders are gone, and an 8 GB Mac reports
+a working set of roughly 5.3 GiB — so it does not fit, with or without that saving.
+Rather than refuse, pagedMark reads the budget and streams the weights from the CPU one
+module at a time. Same output, and a peak that fits anything:
+
+| Same frame, same seed | Peak device memory | Wall |
+| --- | --- | --- |
+| Weights resident (16 GB Mac) | 7.70 GiB | 7.1 s |
+| Weights streamed (8 GB Mac) | **0.28 GiB** | 24.1 s |
+
+Two things make that work. The fixed prompts are encoded once on the CPU and both text
+encoders are dropped before anything reaches the device — 1.52 GiB of a loaded 8.79 GiB,
+for text that cannot change between runs. And the plan is chosen from the measured
+budget, then **stated**: a run three times slower than the fast path says so before you
+wait through it, instead of looking broken.
+
+Below about 2 GiB nothing is left to trade, and the refusal says which commands still
+work there rather than failing inside a model loader.
+
 ### Metal has numerical floors
 
 Below a face strength of 0.05 the fp16 path stops producing an image: three of four

@@ -50,6 +50,8 @@ from pagedmark._internal.watermark_profiles import (
     sdxl_face_strength,
     sdxl_global_steps,
     sdxl_lightning_enabled,
+    sdxl_releases_text_encoders,
+    sdxl_residency_plan,
 )
 
 log = logging.getLogger(__name__)
@@ -144,6 +146,10 @@ class SdxlZImagePipeline(QwenZImagePipeline):
     def __post_init__(self) -> None:
         super().__post_init__()
         self._sdxl_pipe: Any = None
+        # Set when the fixed prompts have been encoded and their encoders dropped, so
+        # every later call passes embeddings instead of text.
+        self._prompt_embeds: Any = None
+        self._pooled_prompt_embeds: Any = None
 
     def _load_sdxl(self) -> Any:
         if self._sdxl_pipe is not None:
@@ -175,7 +181,9 @@ class SdxlZImagePipeline(QwenZImagePipeline):
             variant="fp16",
             add_watermarker=False,
             **token,
-        ).to(self.device)
+        )
+        if self.device != MPS_DEVICE:
+            pipe = pipe.to(self.device)
         if lightning:
             # SDXL's own four-step distillation, at the strength its authors document.
             # The reference graph loads the Qwen LoRA at 0.8; carrying that number to a
@@ -186,6 +194,19 @@ class SdxlZImagePipeline(QwenZImagePipeline):
             pipe.scheduler = EulerDiscreteScheduler.from_config(pipe.scheduler.config, timestep_spacing="trailing")
         # Without the LoRA the checkpoint's own scheduler config is the right one: the
         # trailing spacing above exists for the distillation, not for the base model.
+        plan = sdxl_residency_plan(self._device_memory_gib()) if self.device == MPS_DEVICE else None
+        if sdxl_releases_text_encoders(self.device):
+            self._encode_fixed_prompts(pipe)
+        if plan is not None and plan.offload:
+            if plan.note:
+                self._progress(plan.note)
+            # Sequential offload keeps one module on the device at a time: measured at
+            # 0.28 GiB peak against 7.70 GiB resident, for ~3.4x the wall time. It is
+            # what makes an 8 GiB Mac able to run this at all.
+            pipe.enable_sequential_cpu_offload(device=self.device)
+        elif self.device == MPS_DEVICE:
+            pipe.to(self.device)
+
         if self.device == MPS_DEVICE:
             from pagedmark._internal.watermark_remover import empty_device_cache
 
@@ -214,6 +235,43 @@ class SdxlZImagePipeline(QwenZImagePipeline):
         if not global_only:
             self._load_zimage()
             self._load_sam()
+
+    def _encode_fixed_prompts(self, pipe: Any) -> None:
+        """Encode the stage's constant prompts once, on the CPU, then drop the encoders.
+
+        Done before the stack moves to the device, so the two encoders never occupy it at
+        all: 1.52 GiB of a loaded 8.79 GiB, for text that cannot change between runs.
+        """
+        import gc
+
+        import torch
+
+        if self._prompt_embeds is not None:
+            return
+        with torch.no_grad():
+            embeds, _negative, pooled, _negative_pooled = pipe.encode_prompt(
+                prompt=self._global_prompt(),
+                device=torch.device(CPU_DEVICE),
+                num_images_per_prompt=1,
+                do_classifier_free_guidance=False,
+            )
+        self._prompt_embeds, self._pooled_prompt_embeds = embeds, pooled
+        pipe.text_encoder = None
+        pipe.text_encoder_2 = None
+        gc.collect()
+
+    def _prompt_kwargs(self) -> dict[str, Any]:
+        """The conditioning arguments for one call: embeddings where they were cached.
+
+        The negative prompt only travels on the text path, and only for show: this stage
+        runs at CFG 1.0, where Diffusers never encodes a negative prompt at all.
+        """
+        if self._prompt_embeds is None:
+            return {"prompt": self._global_prompt(), "negative_prompt": self._global_negative()}
+        return {
+            "prompt_embeds": self._prompt_embeds.to(self.device),
+            "pooled_prompt_embeds": self._pooled_prompt_embeds.to(self.device),
+        }
 
     def _face_crop_cap(self) -> int | None:
         """Cap the crop where the crop's size, not the face's, decides the wall time."""
@@ -259,8 +317,7 @@ class SdxlZImagePipeline(QwenZImagePipeline):
         self._progress(f"Repairing face {index}/{total} with SDXL: strength={floored:.4f}, steps={SDXL_FACE_STEPS}...")
         generator = torch.Generator(device=CPU_DEVICE).manual_seed(seed) if seed is not None else None
         result = pipe(
-            prompt=self._global_prompt(),
-            negative_prompt=self._global_negative(),
+            **self._prompt_kwargs(),
             image=crop,
             control_image=build_canny_control_image(crop),
             controlnet_conditioning_scale=float(self.controlnet_conditioning_scale),
@@ -319,8 +376,7 @@ class SdxlZImagePipeline(QwenZImagePipeline):
         generator_device = CPU_DEVICE if self.device == MPS_DEVICE else self.device
         generator = torch.Generator(device=generator_device).manual_seed(seed) if seed is not None else None
         result = pipe(
-            prompt=self._global_prompt(),
-            negative_prompt=self._global_negative(),
+            **self._prompt_kwargs(),
             image=prepared,
             control_image=control,
             controlnet_conditioning_scale=float(self.controlnet_conditioning_scale),

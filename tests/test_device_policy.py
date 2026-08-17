@@ -255,6 +255,52 @@ class TestSamplingPolicy:
         assert self._steps(MPS_DEVICE, 8) == self._steps(MPS_DEVICE, 4)
 
 
+class TestResidencyPolicy:
+    """Where the weights live, decided from the device budget rather than from hope."""
+
+    @staticmethod
+    def _plan(memory_gib: float):
+        from pagedmark._internal.watermark_profiles import sdxl_residency_plan
+
+        return sdxl_residency_plan(memory_gib)
+
+    def test_a_16gib_mac_keeps_the_weights_resident(self):
+        """11.84 GiB is the measured working set there, against a 7.7 GiB stack."""
+        plan = self._plan(11.84)
+        assert plan.offload is False
+        assert plan.note is None, "the fast path must not narrate"
+
+    def test_an_8gib_mac_streams_them_and_says_why(self):
+        """~5.3 GiB cannot hold the stack, and the run is three times slower for it.
+
+        Silence here is the worst outcome: the user waits through a run that looks
+        broken. Measured on an M5: 0.28 GiB peak offloaded against 7.70 GiB resident,
+        24.1 s against 7.1 s on the same frame.
+        """
+        plan = self._plan(5.3)
+        assert plan.offload is True
+        assert plan.note is not None
+        assert "three times" in plan.note
+
+    def test_an_unreadable_budget_takes_the_path_that_runs_anywhere(self):
+        plan = self._plan(0.0)
+        assert plan.offload is True
+        assert plan.note is not None
+
+    def test_a_budget_too_small_for_either_plan_is_refused_with_what_still_works(self):
+        with pytest.raises(ValueError, match="smallest workable") as excinfo:
+            self._plan(1.0)
+        message = str(excinfo.value)
+        assert "1.0 GiB" in message
+        assert "identify" in message, "the refusal names the commands that still run"
+
+    def test_the_text_encoders_are_released_only_where_that_was_measured(self):
+        from pagedmark._internal.watermark_profiles import sdxl_releases_text_encoders
+
+        assert sdxl_releases_text_encoders(MPS_DEVICE) is True
+        assert sdxl_releases_text_encoders(CUDA_DEVICE) is False
+
+
 class TestVaeTilingPolicy:
     """Tiling the VAE decode is a memory trade, so it is made where it pays."""
 
@@ -333,7 +379,7 @@ class TestSamplingPolicyReachesTheLoader:
     """The policy has to change what is LOADED, not just what a function returns."""
 
     @staticmethod
-    def _load_with_recorder(monkeypatch, device: str):
+    def _load_with_recorder(monkeypatch, device: str, budget_gib: float = 11.84):
         """Build the SDXL stage against stubbed loaders and report what it did."""
         from unittest.mock import MagicMock
 
@@ -345,6 +391,9 @@ class TestSamplingPolicyReachesTheLoader:
         pipe = MagicMock()
         pipe.to.return_value = pipe
         pipe.load_lora_weights.side_effect = lambda *a, **k: calls.__setitem__("lora", calls["lora"] + 1)
+        # The loader encodes the fixed prompts before dropping the encoders, so the fake
+        # has to answer that call with the four values SDXL's encoder returns.
+        pipe.encode_prompt.return_value = (MagicMock(), None, MagicMock(), None)
 
         monkeypatch.setattr(diffusers.ControlNetModel, "from_pretrained", staticmethod(lambda *a, **k: MagicMock()))
         monkeypatch.setattr(diffusers.AutoencoderKL, "from_pretrained", staticmethod(lambda *a, **k: MagicMock()))
@@ -361,6 +410,8 @@ class TestSamplingPolicyReachesTheLoader:
             "huggingface_hub.hf_hub_download", staticmethod(lambda *a, **k: "lora.safetensors"), raising=False
         )
         pipeline = module.SdxlZImagePipeline(device=device, torch_dtype=None)
+        # A fixed budget, so the plan under test does not depend on the host's memory.
+        monkeypatch.setattr(pipeline, "_device_memory_gib", lambda: budget_gib)
         pipeline._load_sdxl()
         return calls, pipe
 
@@ -369,6 +420,28 @@ class TestSamplingPolicyReachesTheLoader:
         calls, pipe = self._load_with_recorder(monkeypatch, MPS_DEVICE)
         assert calls["lora"] == 0
         pipe.fuse_lora.assert_not_called()
+
+    def test_a_small_budget_installs_the_offload_hooks(self, monkeypatch):
+        """The plan has to change what the loader DOES, not only what it returns."""
+        pytest.importorskip("diffusers")
+        _calls, pipe = self._load_with_recorder(monkeypatch, MPS_DEVICE, budget_gib=5.3)
+
+        pipe.enable_sequential_cpu_offload.assert_called_once()
+        assert pipe.enable_sequential_cpu_offload.call_args.kwargs == {"device": MPS_DEVICE}
+
+    def test_a_large_budget_does_not(self, monkeypatch):
+        pytest.importorskip("diffusers")
+        _calls, pipe = self._load_with_recorder(monkeypatch, MPS_DEVICE, budget_gib=11.84)
+
+        pipe.enable_sequential_cpu_offload.assert_not_called()
+
+    def test_mps_encodes_the_prompts_once_and_drops_the_encoders(self, monkeypatch):
+        pytest.importorskip("diffusers")
+        _calls, pipe = self._load_with_recorder(monkeypatch, MPS_DEVICE)
+
+        pipe.encode_prompt.assert_called_once()
+        assert pipe.text_encoder is None
+        assert pipe.text_encoder_2 is None
 
     def test_cuda_still_fuses_it(self, monkeypatch):
         """The discriminating half: without this, a loader that never fuses passes."""

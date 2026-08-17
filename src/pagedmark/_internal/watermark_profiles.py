@@ -129,6 +129,83 @@ SDXL_LIGHTNING_PATTERN = "sdxl_lightning_4step_lora.safetensors"
 SDXL_LIGHTNING_DEVICES = (CUDA_DEVICE,)
 SDXL_UNDISTILLED_GLOBAL_STEPS = 16
 
+# How much of the device the weights want, measured on an M5 with the text encoders
+# already released (see `sdxl_releases_text_encoders`):
+#
+# - resident: 7.70 GiB peak while running a 0.44 MP frame, 7.1 s.
+# - sequentially offloaded to the CPU: 0.28 GiB peak for the same frame, 24.1 s.
+#
+# The second number is what makes a small Mac usable at all: a 16 GiB machine reports an
+# 11.84 GiB working set, an 8 GiB one about 5.3 GiB, and the resident stack does not fit
+# the latter with or without the encoder saving. Offloading trades 3.4x the wall time for
+# a peak that fits anything.
+SDXL_RESIDENT_STACK_GIB = 7.7
+SDXL_OFFLOADED_STACK_GIB = 0.3
+# Below this there is nothing left to trade: the offloaded path still needs room for one
+# module plus the frame's activations, and a budget this small means the device is not
+# the tool's problem to solve.
+SDXL_MIN_BUDGET_GIB = 2.0
+
+
+@dataclass(frozen=True)
+class ResidencyPlan:
+    """Where the SDXL weights live for this run."""
+
+    offload: bool
+    # Set when the plan is not the fast one, so the CLI can say why a run is slow before
+    # the user waits through it.
+    note: str | None = None
+
+
+def sdxl_residency_plan(memory_gib: float) -> ResidencyPlan:
+    """Choose between resident weights and sequential CPU offload from the budget.
+
+    Decided at load time from the device budget alone. Per-frame activation pressure is
+    a separate question, handled by `vae_tiling_needed` and `fits_in_one_pass`, because
+    it depends on an image this function has not seen.
+
+    An unreadable budget (0.0) offloads: it is the plan that runs everywhere, and a wrong
+    guess costs time rather than an hour of paging.
+    """
+    if memory_gib <= 0.0:
+        return ResidencyPlan(
+            offload=True,
+            note=(
+                "This device's memory budget could not be read, so the weights stream from "
+                "the CPU. Slower, but it runs anywhere."
+            ),
+        )
+    if memory_gib < SDXL_MIN_BUDGET_GIB:
+        raise ValueError(
+            f"This device reports a {memory_gib:.1f} GiB working set, and the smallest workable "
+            f"configuration needs about {SDXL_MIN_BUDGET_GIB:.0f} GiB. Visible-mark removal, "
+            "metadata stripping and every identify command still run here."
+        )
+    if memory_gib >= SDXL_RESIDENT_STACK_GIB + 1.5:
+        return ResidencyPlan(offload=False)
+    return ResidencyPlan(
+        offload=True,
+        note=(
+            f"{memory_gib:.1f} GiB is not enough to hold the {SDXL_RESIDENT_STACK_GIB:.1f} GiB stack, "
+            "so the weights stream from the CPU one module at a time. Expect roughly three times "
+            "the wall time for the same output."
+        ),
+    )
+
+
+def sdxl_releases_text_encoders(device: str) -> bool:
+    """Whether to encode the fixed prompts once and drop the text encoders.
+
+    Both prompts are compile-time constants and the stage runs at CFG 1.0, so exactly one
+    embedding is ever needed -- and at CFG 1.0 Diffusers never encodes the negative
+    prompt at all, which makes that constant inert on this path. Releasing the two
+    encoders afterwards frees a measured 1.52 GiB of the 8.79 GiB the loaded stack holds.
+
+    MPS only, for the same reason as every other decision here: it is where the number
+    was measured.
+    """
+    return device.casefold() == MPS_DEVICE
+
 
 def sdxl_lightning_enabled(device: str) -> bool:
     """Whether the SDXL global stage fuses the four-step distillation LoRA."""
