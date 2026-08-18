@@ -1303,3 +1303,60 @@ class TestPreviewFlag:
 
         assert mock_cls.call_args.kwargs["preview"] is False
         assert "Preview:" not in result.output
+
+
+class TestPixelRuntimeGuard:
+    """The default install carries no OpenCV, and every pixel command has to say so."""
+
+    @staticmethod
+    def _without_pixels(monkeypatch):
+        """Simulate the metadata-only install the default `pip install` produces."""
+        import pagedmark.optional_deps as optional_deps
+
+        real = optional_deps.module_available
+        monkeypatch.setattr(
+            optional_deps,
+            "module_available",
+            lambda *names: False if "cv2" in names else real(*names),
+        )
+
+    @pytest.mark.parametrize(
+        ("argv", "feature"),
+        [
+            (["visible", "IMG"], "Visible-mark removal"),
+            (["erase", "IMG", "--region", "0,0,4,4"], "Region erasing"),
+            (["all", "IMG"], "The full pipeline"),
+            (["measure", "IMG", "IMG"], "Measuring"),
+        ],
+    )
+    def test_a_pixel_command_explains_itself_instead_of_crashing(self, runner, sample_png, monkeypatch, argv, feature):
+        """Before this guard the first pixel command of a default install died on
+        ``ModuleNotFoundError: No module named 'cv2'`` several frames inside the library,
+        and the obvious next move -- ``pip install cv2`` -- names a package that does not
+        exist on PyPI."""
+        self._without_pixels(monkeypatch)
+
+        result = runner.invoke(main, [arg.replace("IMG", str(sample_png)) for arg in argv])
+
+        assert result.exit_code == 1, result.output
+        assert feature in result.output
+        assert "pagedmark[visible]" in result.output
+        assert "Traceback" not in result.output
+
+    def test_the_batch_command_is_guarded_too(self, runner, tmp_path, monkeypatch):
+        self._without_pixels(monkeypatch)
+        directory = _make_batch_dir(tmp_path, count=1)
+
+        result = runner.invoke(main, ["batch", str(directory), "--mode", "visible"])
+
+        assert result.exit_code == 1, result.output
+        assert "Batch processing" in result.output
+
+    def test_metadata_commands_still_run_without_it(self, runner, sample_png, monkeypatch):
+        """The discriminating half: the guard must not spread to the light paths, which
+        are the reason the default install is metadata-only in the first place."""
+        self._without_pixels(monkeypatch)
+
+        result = runner.invoke(main, ["metadata", str(sample_png), "--check"])
+
+        assert result.exit_code == 0, result.output

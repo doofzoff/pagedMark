@@ -23,6 +23,7 @@ from pagedmark import __version__, image_io, watermark_registry
 from pagedmark._internal.constants import SUPPORTED_FORMATS
 from pagedmark._internal.utils import is_supported_format
 from pagedmark._internal.watermark_profiles import (
+    INVISIBLE_EXTRA_MPS,
     PROFILE_CHOICES,
     resolve_strength,
     strength_default_help,
@@ -150,6 +151,31 @@ def _validate_image(path: Path) -> Path:
     if not is_supported_format(path):
         console.print(f"Warning: {path.suffix} may not be supported (expected: {', '.join(SUPPORTED_FORMATS)})")
     return path
+
+
+# The default install is metadata-only on purpose: it carries no NumPy, no OpenCV and no
+# model runtime, which is what makes `identify` and the metadata commands light enough to
+# drop into a service. Everything that touches pixels therefore has to say so itself.
+_PIXEL_EXTRA = "'pagedmark[visible]'"
+
+
+def _require_pixel_runtime(feature: str) -> None:
+    """Exit with an install hint when the pixel runtime is absent.
+
+    Without this the first pixel command of a default install dies on
+    ``ModuleNotFoundError: No module named 'cv2'`` several frames inside the library, and
+    the obvious next move -- installing "cv2" -- is a package that does not exist.
+    """
+    from pagedmark import optional_deps
+
+    if optional_deps.module_available("cv2", "numpy"):
+        return
+    console.print(
+        f"Error: {feature} needs the pixel runtime, which the default install leaves out.\n"
+        f"  Install it with: pip install {_PIXEL_EXTRA}\n"
+        f"  On Apple Silicon, pip install {INVISIBLE_EXTRA_MPS} covers this and the diffusion stage."
+    )
+    raise SystemExit(1)
 
 
 def _invisible_install_hint() -> str:
@@ -697,6 +723,7 @@ def cmd_visible(
     ``--help`` to see the current mark keys. For arbitrary logos and objects, use
     ``erase``.
     """
+    _require_pixel_runtime("Visible-mark removal")
     _banner()
     source = _validate_image(source)
 
@@ -776,6 +803,7 @@ def cmd_erase(
     the boxes you pass, regardless of color or location. Runs on CPU. Use this
     for marks the dedicated ``visible`` registry does not cover.
     """
+    _require_pixel_runtime("Region erasing")
     from pagedmark.region_eraser import erase
 
     _banner()
@@ -1399,6 +1427,7 @@ def cmd_measure(source: Path, candidate: Path, no_faces: bool, as_json: bool) ->
 
     Needs no GPU and loads no diffusion model.
     """
+    _require_pixel_runtime("Measuring")
     import json as json_module
 
     from pagedmark import fidelity
@@ -1582,6 +1611,7 @@ def cmd_all(
 
     If invisible watermark deps are not installed, skips step 2 with a warning.
     """
+    _require_pixel_runtime("The full pipeline")
     _banner()
     source = _validate_image(source)
 
@@ -1765,6 +1795,7 @@ def cmd_batch(
     cpu_offload: bool,
 ) -> None:
     """Process all images in a directory."""
+    _require_pixel_runtime("Batch processing")
     _banner()
 
     if output_dir is None:

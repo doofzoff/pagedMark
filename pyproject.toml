@@ -4,7 +4,7 @@
 # on it, including the ComfyUI node package. The console script below carries
 # the same weight, since users have it on PATH.
 name = "pagedmark"
-version = "0.1.0"
+version = "0.1.1"
 description = "Metal backend for AI watermark removal: SynthID-class pixel regeneration, visible marks and provenance metadata, on Apple Silicon"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
