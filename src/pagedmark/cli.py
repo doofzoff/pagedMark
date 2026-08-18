@@ -2045,6 +2045,7 @@ def cmd_quick_action(remove: bool) -> None:
         raise SystemExit(1)
 
     target = quick_action.install(executable, home)
+    missing = quick_action.missing_runtime(executable)
     console.print(
         f"  Installed: {target}\n"
         f"  Runs:      {executable} all <file>\n\n"
@@ -2054,6 +2055,15 @@ def cmd_quick_action(remove: bool) -> None:
         "  If the item does not appear yet, it is the services cache rather than the\n"
         "  install: /System/Library/CoreServices/pbs -flush, or log out and back in."
     )
+    if missing:
+        # The default install is metadata-only, so this is the common case rather than
+        # the exotic one, and a notification per right-click is a bad place to learn it.
+        console.print(
+            f"\n  WARNING: that executable cannot run the full pipeline yet -- it is missing "
+            f"{', '.join(missing)}.\n"
+            f"  Every right-click would fail until you install the extras:\n"
+            f"    uv tool install --force {_invisible_install_hint()}"
+        )
 
 
 if __name__ == "__main__":

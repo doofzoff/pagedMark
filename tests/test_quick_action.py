@@ -8,6 +8,7 @@ workflow through ``automator`` against a stub executable.
 
 from __future__ import annotations
 
+import json
 import plistlib
 import sys
 from pathlib import Path
@@ -215,3 +216,80 @@ class TestQuickActionCommand:
 
         assert result.exit_code == 0, result.output
         assert "Nothing to remove" in result.output
+
+
+class TestRuntimeProbe:
+    """The default install is metadata-only, so this is the common case, not the exotic one."""
+
+    def test_a_metadata_only_target_is_reported_before_the_first_right_click(self, monkeypatch):
+        import subprocess
+
+        payload = json.dumps(
+            {
+                "installed": {
+                    "pixels (numpy, opencv)": False,
+                    "diffusion (torch, diffusers)": False,
+                    "video (av)": False,
+                }
+            }
+        )
+        monkeypatch.setattr(subprocess, "run", lambda *_a, **_k: subprocess.CompletedProcess([], 0, payload, ""))
+
+        missing = quick_action.missing_runtime(Path("/opt/bin/pagedmark"))
+
+        assert missing == ["pixels (numpy, opencv)", "diffusion (torch, diffusers)"]
+
+    def test_video_alone_is_not_worth_a_warning(self, monkeypatch):
+        """`all` does not need it, and warning about what the command does not use trains
+        the user to ignore the warning that matters."""
+        import subprocess
+
+        payload = json.dumps(
+            {
+                "installed": {
+                    "pixels (numpy, opencv)": True,
+                    "diffusion (torch, diffusers)": True,
+                    "video (av)": False,
+                }
+            }
+        )
+        monkeypatch.setattr(subprocess, "run", lambda *_a, **_k: subprocess.CompletedProcess([], 0, payload, ""))
+
+        assert quick_action.missing_runtime(Path("/opt/bin/pagedmark")) == []
+
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            OSError("no such executable"),
+            __import__("subprocess").TimeoutExpired("pagedmark", 60),
+            __import__("subprocess").CalledProcessError(1, "pagedmark"),
+        ],
+    )
+    def test_a_probe_that_fails_cannot_block_the_install(self, failure, monkeypatch):
+        import subprocess
+
+        def explode(*_args, **_kwargs):
+            raise failure
+
+        monkeypatch.setattr(subprocess, "run", explode)
+
+        assert quick_action.missing_runtime(Path("/opt/bin/pagedmark")) is None
+
+    def test_the_install_warns_and_still_installs(self, tmp_path, monkeypatch):
+        from click.testing import CliRunner
+
+        from pagedmark.cli import main
+
+        monkeypatch.setattr("platform.system", lambda: "Darwin")
+        monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path))
+        executable = tmp_path / "pagedmark"
+        executable.touch()
+        monkeypatch.setattr(quick_action, "find_executable", lambda: executable)
+        monkeypatch.setattr(quick_action, "missing_runtime", lambda _exe: ["pixels (numpy, opencv)"])
+
+        result = CliRunner().invoke(main, ["quick-action"])
+
+        assert result.exit_code == 0, result.output
+        assert "WARNING" in result.output
+        assert "pixels (numpy, opencv)" in result.output
+        assert quick_action.service_path(tmp_path).exists(), "the warning is advice, not a refusal"

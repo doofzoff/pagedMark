@@ -178,6 +178,38 @@ def find_executable() -> Path | None:
     return Path(found).resolve() if found else None
 
 
+def missing_runtime(executable: Path) -> list[str] | None:
+    """Which extras the target executable lacks for a full ``all`` run.
+
+    Asked at install time because the failure it prevents is otherwise invisible: the
+    default install is metadata-only, so a Quick Action pointed at it installs cleanly
+    and then reports a missing dependency from every right-click. The executable may
+    live in a different environment than the one running this, so it is asked rather
+    than inspected -- and any failure to ask returns None, because a probe must not be
+    able to block an install.
+    """
+    import json
+    import subprocess
+
+    try:
+        completed = subprocess.run(  # noqa: S603 -- the path we just resolved ourselves
+            [str(executable), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=True,
+        )
+        installed = json.loads(completed.stdout)["installed"]
+    except Exception:
+        return None
+    return [name for name, present in installed.items() if not present and _needed_for_all(name)]
+
+
+def _needed_for_all(name: str) -> bool:
+    """``all`` needs pixels and diffusion; video and the extra detectors are optional."""
+    return name.startswith(("pixels", "diffusion"))
+
+
 def install(executable: Path, home: Path) -> Path:
     """Write the bundle, replacing any previous one. Returns the bundle path."""
     target = service_path(home)
