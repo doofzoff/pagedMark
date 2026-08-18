@@ -1245,6 +1245,30 @@ class TestMeasureCommand:
         assert payload["psnr"] is None
         assert payload["invented_texture"] == pytest.approx(1.0)
 
+    def test_it_points_at_the_region_that_moved_most(self, runner, tmp_path):
+        """A caption row is a fraction of a percent of a frame, so the average cannot
+        report it and a coordinate has to.
+
+        Its own pair rather than the shared one: a block with no structure in it is
+        deliberately not measured, and the shared fixture is smooth by design.
+        """
+        rng = np.random.default_rng(0)
+        frame = np.clip(np.full((256, 256, 3), 96, np.float32) + rng.normal(0, 14, (256, 256, 3)), 0, 255)
+        source = tmp_path / "textured.png"
+        candidate = tmp_path / "textured_out.png"
+        cv2.imwrite(str(source), frame.astype(np.uint8))
+        damaged = frame.copy()
+        damaged[48:96, 48:96] = 240
+        cv2.imwrite(str(candidate), damaged.astype(np.uint8))
+
+        result = runner.invoke(main, ["measure", str(source), str(candidate), "--no-faces", "--json"])
+
+        assert result.exit_code == 0, result.output
+        region = json.loads(result.output)["worst_region"]
+        assert region is not None
+        assert region["psnr"] < json.loads(result.output)["psnr"]
+        assert region["size"] > 0
+
     def test_no_faces_skips_the_detector_entirely(self, runner, tmp_path):
         """--no-faces is also how a user avoids the detector's model download."""
         source, candidate = self._pair(tmp_path, damage=True)

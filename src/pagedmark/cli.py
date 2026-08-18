@@ -1454,6 +1454,16 @@ def cmd_measure(source: Path, candidate: Path, no_faces: bool, as_json: bool) ->
                     "face_psnr": _finite(report.face_psnr),
                     "faces": [{"box": list(face.box), "psnr": _finite(face.psnr)} for face in report.faces],
                     "invented_texture": report.invented_texture,
+                    "worst_region": (
+                        {
+                            "psnr": _finite(report.worst_region.psnr),
+                            "x": report.worst_region.x,
+                            "y": report.worst_region.y,
+                            "size": report.worst_region.size,
+                        }
+                        if report.worst_region
+                        else None
+                    ),
                 },
                 indent=2,
                 allow_nan=False,
@@ -1475,6 +1485,11 @@ def cmd_measure(source: Path, candidate: Path, no_faces: bool, as_json: bool) ->
         console.print("  Invented texture: no flat, dark region large enough to measure")
     else:
         console.print(f"  Invented texture: {report.invented_texture:.2f}x the source")
+    if report.worst_region:
+        region = report.worst_region
+        console.print(
+            f"  Biggest change:   {region.psnr:.2f} dB in a {region.size}px block at ({region.x}, {region.y})"
+        )
 
     # A number without a reading is a number the user has to guess at. These two are
     # the boundaries the project's own decisions were made against.

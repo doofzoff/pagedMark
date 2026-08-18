@@ -247,6 +247,9 @@ pagedmark all photo.png -o clean.png
 # A whole directory
 pagedmark batch ./photos --mode all
 
+# What did the run cost the picture?
+pagedmark measure photo.png clean.png
+
 # Video
 pagedmark video identify clip.mp4
 pagedmark video all clip.mp4 -o clean.mp4
@@ -257,6 +260,22 @@ pagedmark video batch ./clips --mode all
 The device is detected and the pipeline follows from it. Both are printed before the run
 starts, so a substituted stage is something you read rather than something you discover
 in the output.
+
+`measure` answers the question a README cannot answer for your file. It reports PSNR over
+the frame, PSNR per detected face, invented texture, and the coordinates of the block
+that moved furthest:
+
+```
+Whole frame:      29.36 dB
+Faces:            none detected
+Invented texture: 0.34x the source
+Biggest change:   15.59 dB in a 48px block at (96, 144)
+```
+
+That last line exists because the first four are averages, and an average cannot see a
+ruined caption: a row of small text is a fraction of a percent of the pixels. The
+coordinate does not classify what changed, only where the change is largest, which is
+where to look first.
 
 ### Python
 

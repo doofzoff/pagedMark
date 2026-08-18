@@ -147,3 +147,43 @@ class TestCompare:
 
         assert report.faces == ()
         assert report.psnr == float("inf")
+
+
+class TestWorstRegion:
+    """Where a frame average cannot look: a small region that moved a long way."""
+
+    def test_it_points_at_the_damage_the_frame_average_hides(self):
+        # Textured, because a block with nothing in it is deliberately not measured.
+        source = _with_grain(_flat_dark_frame(512, 512), sigma=12.0)
+        damaged = source.copy()
+        damaged[96:144, 192:240] = 220  # one block, ~0.9% of the frame
+
+        found = fidelity.worst_region(source, damaged)
+
+        assert found is not None
+        assert (found.x, found.y) == (192, 96)
+        assert found.psnr < fidelity.psnr(source, damaged), "the block must score worse than the frame"
+
+    def test_an_untouched_pair_reports_no_change_anywhere(self):
+        frame = _with_grain(_flat_dark_frame(), sigma=8.0)
+        found = fidelity.worst_region(frame, frame)
+        assert found is not None
+        assert found.psnr == float("inf")
+
+    def test_flat_blocks_are_not_the_answer(self):
+        """A featureless block has nothing to lose, and a slight shift there scores
+        terribly for a reason no reader would care about."""
+        # Split on the block grid, so no block straddles the two halves.
+        source = _flat_dark_frame(288, 288)
+        source[:, 144:] = _with_grain(_flat_dark_frame(144, 288), sigma=20.0)
+        candidate = source.astype(np.int16) + 6  # move every pixel by the same amount
+        found = fidelity.worst_region(source, np.clip(candidate, 0, 255).astype(np.uint8))
+        assert found is not None
+        assert found.x >= 144, "the measurable half is the textured one"
+
+    def test_a_frame_smaller_than_one_block_has_no_answer(self):
+        assert fidelity.worst_region(_flat_dark_frame(32, 32), _flat_dark_frame(32, 32)) is None
+
+    def test_mismatched_shapes_are_refused(self):
+        with pytest.raises(ValueError, match="identical shapes"):
+            fidelity.worst_region(_flat_dark_frame(64, 64), _flat_dark_frame(32, 32))

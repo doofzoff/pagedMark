@@ -64,6 +64,15 @@ class FaceFidelity(NamedTuple):
     psnr: float
 
 
+class WorstRegion(NamedTuple):
+    """The block the run changed most, and where to find it."""
+
+    psnr: float
+    x: int
+    y: int
+    size: int
+
+
 class FidelityReport(NamedTuple):
     """The full comparison. ``invented_texture`` is None when the source has no
     flat, dark region large enough to measure one in."""
@@ -73,6 +82,7 @@ class FidelityReport(NamedTuple):
     psnr: float
     faces: tuple[FaceFidelity, ...]
     invented_texture: float | None
+    worst_region: WorstRegion | None
 
     @property
     def face_psnr(self) -> float | None:
@@ -159,6 +169,44 @@ def invented_texture(reference: NDArray, candidate: NDArray) -> float | None:
     return _band_shape(candidate, mask) / baseline
 
 
+# Small enough to isolate a caption row or a single face, large enough that its PSNR is
+# a measurement rather than pixel noise.
+_BLOCK_PX = 48
+# Blocks flatter than this have nothing to lose, and a flat block that moved slightly
+# scores terribly for no reason a reader would care about.
+_BLOCK_MIN_STD = 6.0
+
+
+def worst_region(reference: NDArray, candidate: NDArray, block: int = _BLOCK_PX) -> WorstRegion | None:
+    """The block-sized region the candidate changed most, with its coordinates.
+
+    A frame average cannot see a ruined caption: a text row is a fraction of a percent of
+    the pixels. This does not claim to identify WHAT was damaged -- four heuristics for
+    that were tried and none separated a damaged caption from an untouched photograph --
+    only where the change is largest, which is where a reader should look first.
+    """
+    import numpy as np
+
+    if reference.shape != candidate.shape:
+        raise ValueError("reference and candidate must have identical shapes")
+    height, width = reference.shape[:2]
+    if height < block or width < block:
+        return None
+
+    found: WorstRegion | None = None
+    for y in range(0, height - block + 1, block):
+        for x in range(0, width - block + 1, block):
+            source = reference[y : y + block, x : x + block].astype(np.float32)
+            if float(source.std()) < _BLOCK_MIN_STD:
+                continue
+            output = candidate[y : y + block, x : x + block].astype(np.float32)
+            mse = float(np.mean((source - output) ** 2))
+            value = float("inf") if mse <= 0.0 else float(10.0 * np.log10(255.0**2 / mse))
+            if found is None or value < found.psnr:
+                found = WorstRegion(value, x, y, block)
+    return found
+
+
 def _detected_faces(reference_path: Path) -> list[tuple[int, int, int, int]]:
     """Face boxes from the source, or none when the detector is unavailable.
 
@@ -210,4 +258,5 @@ def compare(reference_path: Path, candidate_path: Path, *, faces: bool = True) -
         psnr=psnr(source, output),
         faces=tuple(face_rows),
         invented_texture=invented_texture(source, output),
+        worst_region=worst_region(source, output),
     )
