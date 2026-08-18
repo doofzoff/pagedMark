@@ -1496,7 +1496,8 @@ def cmd_measure(source: Path, candidate: Path, no_faces: bool, as_json: bool) ->
     console.print(
         "\n  A frame PSNR near 30 dB is a normal regeneration; faces move further than the\n"
         "  frame does. Invented texture at 1.0 means the flat regions came back as flat as\n"
-        "  they started -- the regression this metric exists for read 1.24x."
+        "  they started -- the regression this metric exists for read 1.24x. The biggest\n"
+        "  change is where to look first: a frame average cannot see a ruined caption."
     )
 
 
@@ -2006,6 +2007,53 @@ def cmd_batch(
     # to always exit 0, hiding both per-image errors and skipped SynthID scrubs).
     if errors or synthid_skipped_count:
         raise SystemExit(1)
+
+
+# ── Finder integration ──
+@main.command("quick-action")
+@click.option("--uninstall", "remove", is_flag=True, help="Remove the Quick Action instead of installing it.")
+def cmd_quick_action(remove: bool) -> None:
+    """Install a Finder Quick Action: right-click an image to clean it.
+
+    macOS only, because a Quick Action is a macOS concept -- and this is the one place
+    where being a Metal-first project is a feature rather than a constraint.
+    """
+    import platform
+
+    from pagedmark import quick_action
+
+    if platform.system() != "Darwin":
+        console.print("  Quick Actions are a macOS feature; there is nothing to install here.")
+        raise SystemExit(1)
+
+    home = Path.home()
+    if remove:
+        if quick_action.uninstall(home):
+            console.print(f"  Removed: {quick_action.service_path(home)}")
+        else:
+            console.print("  Nothing to remove: the Quick Action is not installed.")
+        return
+
+    executable = quick_action.find_executable()
+    if executable is None:
+        # Baking in a bare name would produce a menu item that fails silently, which is
+        # worse than refusing: Finder gives services a minimal PATH.
+        console.print(
+            "  Could not find the pagedmark executable to point the Quick Action at.\n"
+            "  Install it on PATH (uv tool install pagedmark) and run this again."
+        )
+        raise SystemExit(1)
+
+    target = quick_action.install(executable, home)
+    console.print(
+        f"  Installed: {target}\n"
+        f"  Runs:      {executable} all <file>\n\n"
+        "  Right-click an image in Finder -> Quick Actions -> Clean with pagedMark.\n"
+        "  The cleaned file lands beside the original as <name>_clean.<ext>, and each run\n"
+        "  reports its start and its result as a notification.\n\n"
+        "  If the item does not appear yet, it is the services cache rather than the\n"
+        "  install: /System/Library/CoreServices/pbs -flush, or log out and back in."
+    )
 
 
 if __name__ == "__main__":

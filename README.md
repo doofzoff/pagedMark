@@ -250,6 +250,9 @@ pagedmark batch ./photos --mode all
 # What did the run cost the picture?
 pagedmark measure photo.png clean.png
 
+# Right-click an image in Finder instead of typing any of this
+pagedmark quick-action
+
 # Video
 pagedmark video identify clip.mp4
 pagedmark video all clip.mp4 -o clean.mp4
@@ -276,6 +279,23 @@ That last line exists because the first four are averages, and an average cannot
 ruined caption: a row of small text is a fraction of a percent of the pixels. The
 coordinate does not classify what changed, only where the change is largest, which is
 where to look first.
+
+### Finder, for when a terminal is the wrong tool
+
+```bash
+pagedmark quick-action              # install
+pagedmark quick-action --uninstall  # remove
+```
+
+Right-click an image (or a selection of them) in Finder, choose **Quick Actions -> Clean
+with pagedMark**, and the cleaned files land beside the originals as `<name>_clean.<ext>`.
+Each run announces its start and its result as a notification, because a pass takes tens
+of seconds with no window and silence is indistinguishable from a broken install.
+
+The absolute path to the executable is resolved when you install the action and written
+into it. Finder launches services with a minimal `PATH` -- roughly `/usr/bin:/bin` -- so
+an action that called `pagedmark` by name would work when tested from a terminal and do
+nothing at all from the menu.
 
 ### Python
 
