@@ -1763,7 +1763,7 @@ wheels = [
 
 [[package]]
 name = "pagedmark"
-version = "0.1.1"
+version = "0.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "c2pa-python" },
