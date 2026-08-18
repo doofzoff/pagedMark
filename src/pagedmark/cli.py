@@ -13,6 +13,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NoReturn
@@ -1482,6 +1483,109 @@ def cmd_measure(source: Path, candidate: Path, no_faces: bool, as_json: bool) ->
         "  frame does. Invented texture at 1.0 means the flat regions came back as flat as\n"
         "  they started -- the regression this metric exists for read 1.24x."
     )
+
+
+# ── Environment report ──
+@main.command("doctor")
+@click.option("--json", "as_json", is_flag=True, help="Emit the report as JSON instead of a table.")
+def cmd_doctor(as_json: bool) -> None:
+    """Report what this machine can run, and what it would choose.
+
+    Deliberately dependency-free: it answers on the metadata-only install too, because
+    the question "why does this not work here" is asked most often by exactly the person
+    who has not installed the heavy extras yet.
+    """
+    import json as json_module
+
+    from pagedmark import optional_deps
+    from pagedmark._internal.watermark_profiles import (
+        face_stage_uses_zimage,
+        install_extra_for_device,
+        plan_profile,
+        required_modules,
+    )
+
+    report: dict[str, Any] = {"version": __version__}
+
+    extras = {
+        "pixels (numpy, opencv)": optional_deps.module_available("cv2", "numpy"),
+        "diffusion (torch, diffusers)": optional_deps.module_available("torch", "diffusers"),
+        "face model (diffsynth)": optional_deps.module_available("diffsynth"),
+        "video (av)": optional_deps.module_available("av"),
+        "dwt-dct detector (pywt)": optional_deps.module_available("pywt"),
+    }
+    report["installed"] = extras
+
+    # Without torch there is no device to detect, and reporting "cpu" would name a
+    # verdict the machine never reached. Apple Silicon is guessed from the platform so
+    # the install hint is still the right one.
+    device = "cpu"
+    budget = 0.0
+    torch_present = extras["diffusion (torch, diffusers)"]
+    if torch_present:
+        from pagedmark._internal.watermark_remover import device_memory_gib, get_device
+
+        device = get_device()
+        budget = device_memory_gib(device)
+    else:
+        import platform
+
+        device = "mps" if platform.system() == "Darwin" and platform.machine() == "arm64" else "cuda"
+    report["device"] = device if torch_present else f"{device} (assumed; torch is not installed)"
+    report["memory_budget_gib"] = round(budget, 2) if budget else None
+
+    plan_note: str | None = None
+    try:
+        plan = plan_profile(None, device)
+        report["profile"] = plan.profile
+        report["face_stage"] = "z-image" if face_stage_uses_zimage(device) else "sdxl crops"
+        plan_note = plan.note
+        report["missing_for_invisible"] = [
+            name for name in required_modules(device) if not optional_deps.module_available(name)
+        ]
+    except ValueError as exc:
+        report["profile"] = None
+        report["face_stage"] = None
+        report["missing_for_invisible"] = []
+        plan_note = str(exc)
+
+    residency = None
+    if torch_present and device == "mps" and budget:
+        from pagedmark._internal.watermark_profiles import sdxl_residency_plan
+
+        try:
+            residency_plan = sdxl_residency_plan(budget)
+            residency = "weights streamed from the CPU" if residency_plan.offload else "weights resident"
+        except ValueError as exc:
+            residency = str(exc)
+    report["residency"] = residency
+
+    cache = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface")) / "hub"
+    cached_bytes = sum(f.stat().st_size for f in cache.rglob("*") if f.is_file()) if cache.exists() else 0
+    report["model_cache"] = {"path": str(cache), "gib": round(cached_bytes / 1024**3, 2)}
+
+    if as_json:
+        console.print(json_module.dumps(report, indent=2))
+        return
+
+    console.print(f"  pagedMark:      {__version__}")
+    console.print(f"  Device:         {report['device']}" + (f"  ({budget:.2f} GiB working set)" if budget else ""))
+    console.print(f"  Profile:        {report['profile'] or 'none available'}")
+    if report["face_stage"]:
+        console.print(f"  Face stage:     {report['face_stage']}")
+    if residency:
+        console.print(f"  Weights:        {residency}")
+    console.print(f"  Model cache:    {report['model_cache']['gib']:.2f} GiB in {cache}")
+    console.print("\n  Installed:")
+    for name, present in extras.items():
+        console.print(f"    {'yes' if present else 'no ':3s}  {name}")
+    if report["missing_for_invisible"]:
+        console.print(
+            f"\n  Invisible removal needs {', '.join(report['missing_for_invisible'])} here.\n"
+            f"  Install: pip install {install_extra_for_device(device)}"
+        )
+    if plan_note:
+        console.print(f"\n  {plan_note}")
 
 
 # ── Provenance identification ──

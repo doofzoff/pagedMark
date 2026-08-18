@@ -1360,3 +1360,39 @@ class TestPixelRuntimeGuard:
         result = runner.invoke(main, ["metadata", str(sample_png), "--check"])
 
         assert result.exit_code == 0, result.output
+
+
+class TestDoctorCommand:
+    """The diagnostic has to answer on the install that cannot run anything else."""
+
+    def test_it_reports_without_any_optional_runtime(self, runner, monkeypatch):
+        """The person asking "why does this not work here" is usually the person who has
+        not installed the heavy extras, so doctor must not need them."""
+        import pagedmark.optional_deps as optional_deps
+
+        monkeypatch.setattr(optional_deps, "module_available", lambda *_names: False)
+
+        result = runner.invoke(main, ["doctor"])
+
+        assert result.exit_code == 0, result.output
+        assert "pagedMark:" in result.output
+        assert "Device:" in result.output
+        assert "Traceback" not in result.output
+
+    def test_it_names_the_extra_that_is_missing(self, runner, monkeypatch):
+        import pagedmark.optional_deps as optional_deps
+
+        monkeypatch.setattr(optional_deps, "module_available", lambda *_names: False)
+
+        result = runner.invoke(main, ["doctor"])
+
+        assert "pip install" in result.output
+
+    def test_json_is_machine_readable(self, runner):
+        result = runner.invoke(main, ["doctor", "--json"])
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        assert payload["version"]
+        assert "installed" in payload
+        assert "model_cache" in payload
