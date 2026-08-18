@@ -211,6 +211,16 @@ metadata stripping and `identify` run anywhere.
 | Video | `pagedmark[video]` |
 | Everything available on your Python | `pagedmark[all]` |
 
+**Python 3.11 or newer is required, and macOS ships 3.9.** So `pip3 install pagedmark`
+against the system interpreter reports that no matching distribution exists, even though
+the package is there: old pip filters every file out by `Requires-Python` and says so
+badly. `uv` avoids the question by managing its own interpreter. With pip, name a modern
+one:
+
+```bash
+uv python install 3.12 && uv pip install --python 3.12 pagedmark
+```
+
 On macOS the default PyTorch wheel already ships Metal support, so
 `pagedmark[diffusion]` is the complete Apple Silicon install — it deliberately omits the
 float8 model stack that cannot load there.
