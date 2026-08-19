@@ -1,12 +1,11 @@
 # pagedMark
 
-[![test](https://github.com/doofzoff/pagedMark/actions/workflows/test.yml/badge.svg)](https://github.com/doofzoff/pagedMark/actions/workflows/test.yml)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/pagedmark?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=RED&left_text=downloads)](https://pepy.tech/projects/pagedmark)
 [![pypi](https://img.shields.io/pypi/v/pagedmark?color=006dad)](https://pypi.org/project/pagedmark/)
 ![platform](https://img.shields.io/badge/platform-Apple%20Silicon%20%C2%B7%20CUDA-111111)
 ![python](https://img.shields.io/badge/python-3.11%20%E2%80%93%203.14-3776ab)
 ![license](https://img.shields.io/badge/license-Apache%202.0-4c1)
 ![backend](https://img.shields.io/badge/backend-Metal%20(MPS)-e34c26)
-[![PyPI Downloads](https://static.pepy.tech/personalized-badge/pagedmark?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=RED&left_text=downloads)](https://pepy.tech/projects/pagedmark)
 
 **AI watermark removal built for Apple Silicon.** Strip provenance from images you
 generated yourself — invisible pixel watermarks, visible vendor labels, and the metadata
