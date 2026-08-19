@@ -1606,25 +1606,34 @@ def cmd_doctor(as_json: bool) -> None:
 
 # ── Provenance identification ──
 @main.command("identify")
-@click.argument("source", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.argument("source", type=click.Path(exists=True, path_type=Path))
 @click.option(
     "--no-visible",
     is_flag=True,
     help="Skip pixel-domain detectors (visible sparkle + invisible watermark); metadata-only.",
 )
+@click.option("--recursive", is_flag=True, help="With a directory, descend into subdirectories.")
 @click.option("--json", "as_json", is_flag=True, help="Emit the report as JSON instead of a table.")
 @click.pass_context
-def cmd_identify(ctx: click.Context, source: Path, no_visible: bool, as_json: bool) -> None:
+def cmd_identify(ctx: click.Context, source: Path, no_visible: bool, recursive: bool, as_json: bool) -> None:
     """Identify where an image was made and what watermarks it carries.
 
     Aggregates supported C2PA, IPTC, EXIF, XMP, generator, visible-mark, and
     optional invisible-watermark signals into one provenance verdict. Absence of
     signals is reported as "unknown", never as "clean" because stripped metadata
     leaves no local proof.
+
+    SOURCE may be a directory, which reports every supported image in it as one
+    summary table (or one JSON array). Nothing is written either way: this is the
+    dry run, and it is the only command that cannot modify a file.
     """
     from dataclasses import asdict
 
     from pagedmark.identify import identify
+
+    if source.is_dir():
+        _identify_directory(source, no_visible=no_visible, recursive=recursive, as_json=as_json)
+        return
 
     source = _validate_image(source)
     report = identify(source, check_visible=not no_visible, check_invisible=not no_visible)
@@ -1678,6 +1687,72 @@ def cmd_identify(ctx: click.Context, source: Path, no_visible: bool, as_json: bo
         console.print("\n  Caveats:")
         for c in report.caveats:
             console.print(f"  - {c}")
+
+
+def _identify_directory(directory: Path, *, no_visible: bool, recursive: bool, as_json: bool) -> None:
+    """Report every supported image in a directory as one table, or one JSON array.
+
+    A summary row per file rather than a full report each: the question a directory
+    asks is "which of these carry something", and forty full reports answer it worse
+    than forty rows do. The single-file form still prints everything.
+    """
+    from dataclasses import asdict
+
+    from pagedmark.identify import identify
+
+    paths = sorted(p for p in (directory.rglob("*") if recursive else directory.iterdir()) if is_supported_format(p))
+    if not paths:
+        if as_json:
+            click.echo(json.dumps([], indent=2))
+            return
+        _banner()
+        console.print(f"  No supported images found in {directory}")
+        return
+
+    reports: list[tuple[Path, Any]] = []
+    for path in paths:
+        try:
+            reports.append((path, identify(path, check_visible=not no_visible, check_invisible=not no_visible)))
+        except Exception as error:
+            reports.append((path, error))
+
+    if as_json:
+        payload = [
+            {"file": str(path), "error": str(result)}
+            if isinstance(result, Exception)
+            else {"file": str(path), **asdict(result)}
+            for path, result in reports
+        ]
+        click.echo(json.dumps(payload, default=str, indent=2))
+        return
+
+    _banner()
+    console.print(f"  {len(paths)} images in {directory}\n")
+    table = Table(show_header=True, header_style="bold")
+    table.add_column("File", style="cyan", overflow="fold")
+    table.add_column("Verdict")
+    table.add_column("Platform")
+    table.add_column("Markers", overflow="fold")
+    verdicts = {True: "AI-generated", False: "not AI", None: "unknown"}
+    carrying = 0
+    for path, result in reports:
+        if isinstance(result, Exception):
+            table.add_row(path.name, "unreadable", "-", str(result))
+            continue
+        if result.watermarks:
+            carrying += 1
+        table.add_row(
+            path.name,
+            verdicts[result.is_ai_generated],
+            result.platform or "-",
+            ", ".join(result.watermarks) if result.watermarks else "-",
+        )
+    console.print(table)
+    console.print(
+        f"\n  {carrying} of {len(paths)} carry a readable provenance marker. Nothing was modified.\n"
+        "  An image with no marker is not proven clean: metadata is stripped by re-encoding,\n"
+        "  screenshots and upload, and SynthID-class pixel watermarks have no local detector."
+    )
 
 
 # ── Combined "all" mode ──

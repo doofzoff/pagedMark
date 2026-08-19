@@ -14,7 +14,8 @@ suite, because unit tests feed well-formed fixtures into writable directories.
 2. A DIRECTORY PASSED WHERE A FILE IS EXPECTED. `click.Path(exists=True)` accepts
    directories unless told otherwise, so `identify <dir>` reached the metadata scanner and
    raised `IsADirectoryError` from `open()`. (`batch` was already correct: it declares
-   `file_okay=False`.)
+   `file_okay=False`.) `identify` later gained a deliberate directory form -- it writes
+   nothing, so a folder there is a sweep -- and the guard below covers the rest.
 """
 
 from __future__ import annotations
@@ -101,9 +102,12 @@ class TestApiReportsFailedWrite:
 
 
 class TestDirectoryInputIsRejected:
-    @pytest.mark.parametrize("cmd", ["identify", "visible", "erase", "metadata", "invisible", "all"])
+    @pytest.mark.parametrize("cmd", ["visible", "erase", "metadata", "invisible", "all"])
     def test_directory_as_source_is_a_clean_usage_error(self, tmp_path, cmd):
-        """A directory must be refused by argument parsing, never reach the scanners."""
+        """A directory must be refused by argument parsing, never reach the scanners.
+
+        ``identify`` is the exception and is tested separately: it writes nothing, so a
+        directory there is a sweep rather than a mistake."""
         args = [cmd, str(tmp_path)]
         if cmd == "erase":
             args += ["--region", "1,1,5,5"]
@@ -112,3 +116,10 @@ class TestDirectoryInputIsRejected:
         result = CliRunner().invoke(main, args)
         assert result.exit_code != 0
         assert not isinstance(result.exception, IsADirectoryError), "directory reached the file reader"
+
+    def test_identify_accepts_a_directory_because_it_writes_nothing(self, tmp_path):
+        """The one command that cannot modify a file is the one that may take a folder."""
+        result = CliRunner().invoke(main, ["identify", str(tmp_path), "--no-visible"])
+
+        assert result.exit_code == 0, result.output
+        assert "No supported images found" in result.output

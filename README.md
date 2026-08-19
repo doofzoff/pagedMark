@@ -233,6 +233,9 @@ float8 model stack that cannot load there.
 # What is in this file?
 pagedmark identify photo.png
 
+# What is in this whole folder? Reports only, writes nothing
+pagedmark identify ./photos --recursive
+
 # Visible mark and metadata — no GPU required
 pagedmark visible photo.png -o clean.png
 pagedmark metadata photo.png --remove -o clean.png

@@ -1420,3 +1420,119 @@ class TestDoctorCommand:
         assert payload["version"]
         assert "installed" in payload
         assert "model_cache" in payload
+
+
+class TestIdentifyDirectory:
+    """The dry run over a folder: the one command that cannot modify a file."""
+
+    @pytest.fixture
+    def runner(self):
+        from click.testing import CliRunner
+
+        return CliRunner()
+
+    @staticmethod
+    def _folder(tmp_path, count=3):
+        import numpy as np
+        from PIL import Image
+
+        for index in range(count):
+            Image.fromarray(np.full((32, 32, 3), 10 * index, np.uint8)).save(tmp_path / f"img{index}.png")
+        (tmp_path / "notes.txt").write_text("not an image")
+        return tmp_path
+
+    def test_it_reports_every_image_and_writes_nothing(self, runner, tmp_path):
+        folder = self._folder(tmp_path)
+        before = {p.name: p.read_bytes() for p in folder.iterdir()}
+
+        result = runner.invoke(main, ["identify", str(folder), "--no-visible"])
+
+        assert result.exit_code == 0, result.output
+        assert "3 images in" in result.output
+        assert "Nothing was modified" in result.output
+        assert {p.name: p.read_bytes() for p in folder.iterdir()} == before
+
+    def test_the_json_form_is_one_array_with_the_paths(self, runner, tmp_path):
+        folder = self._folder(tmp_path, count=2)
+
+        result = runner.invoke(main, ["identify", str(folder), "--no-visible", "--json"])
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        assert len(payload) == 2
+        assert all("file" in row for row in payload)
+
+    def test_non_images_are_skipped(self, runner, tmp_path):
+        folder = self._folder(tmp_path, count=1)
+
+        result = runner.invoke(main, ["identify", str(folder), "--no-visible", "--json"])
+
+        files = [row["file"].rsplit("/", 1)[-1] for row in json.loads(result.output)]
+        assert files == ["img0.png"]
+
+    def test_recursive_descends_and_the_default_does_not(self, runner, tmp_path):
+        import numpy as np
+        from PIL import Image
+
+        folder = self._folder(tmp_path, count=1)
+        nested = folder / "sub"
+        nested.mkdir()
+        Image.fromarray(np.zeros((32, 32, 3), np.uint8)).save(nested / "deep.png")
+
+        flat = runner.invoke(main, ["identify", str(folder), "--no-visible", "--json"])
+        deep = runner.invoke(main, ["identify", str(folder), "--no-visible", "--recursive", "--json"])
+
+        assert len(json.loads(flat.output)) == 1
+        assert len(json.loads(deep.output)) == 2
+
+    def test_one_unreadable_file_does_not_end_the_sweep(self, runner, tmp_path):
+        """A malformed file is reported as a row, not as the end of the run. identify
+        absorbs it on its own -- it answers "unknown" rather than raising -- and the
+        per-file guard is there for the readers that do raise."""
+        folder = self._folder(tmp_path, count=2)
+        (folder / "broken.png").write_bytes(b"not really a png")
+
+        result = runner.invoke(main, ["identify", str(folder), "--no-visible", "--json"])
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        assert len(payload) == 3, "every file gets a row, including the broken one"
+
+    def test_a_reader_that_raises_costs_one_row_not_the_sweep(self, runner, tmp_path, monkeypatch):
+        """The per-file guard exists for readers that raise rather than answer."""
+        from pagedmark import identify as identify_module
+
+        folder = self._folder(tmp_path, count=3)
+        original = identify_module.identify
+        calls = {"n": 0}
+
+        def flaky(path, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise RuntimeError("reader exploded")
+            return original(path, **kwargs)
+
+        monkeypatch.setattr(identify_module, "identify", flaky)
+
+        result = runner.invoke(main, ["identify", str(folder), "--no-visible", "--json"])
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        assert len(payload) == 3
+        assert sum("error" in row for row in payload) == 1
+
+    def test_an_empty_folder_says_so_in_both_forms(self, runner, tmp_path):
+        table = runner.invoke(main, ["identify", str(tmp_path), "--no-visible"])
+        as_json = runner.invoke(main, ["identify", str(tmp_path), "--no-visible", "--json"])
+
+        assert "No supported images found" in table.output
+        assert json.loads(as_json.output) == []
+
+    def test_a_single_file_still_prints_the_full_report(self, runner, tmp_path):
+        """The directory form summarises; the single-file form must not start to."""
+        folder = self._folder(tmp_path, count=1)
+
+        result = runner.invoke(main, ["identify", str(folder / "img0.png"), "--no-visible"])
+
+        assert result.exit_code == 0, result.output
+        assert "Verdict:" in result.output
