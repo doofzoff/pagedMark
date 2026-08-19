@@ -262,6 +262,13 @@ class InvisibleEngine:
         from pagedmark import image_io
 
         image_io._register_heif()
+        # Taken before anything runs, because the regeneration is where they are lost:
+        # the model is RGB-only and OpenCV writes no profile. Neither is recoverable
+        # from the output, and neither is visible to a pixel metric.
+        from pagedmark import color_profile
+
+        carryover = color_profile.read(image_path)
+
         image = Image.open(image_path)
         image = ImageOps.exif_transpose(image)
         orig_size = image.size  # (width, height)
@@ -372,6 +379,18 @@ class InvisibleEngine:
                     out_cv = humanizer.adaptive_polish(out_cv, ref, seed=seed)
 
                 image_io.imwrite(out_path, out_cv)
+
+            # After the last write, whichever branch performed it.
+            if color_profile.apply(out_path, carryover) and self._progress_callback:
+                restored = [
+                    name
+                    for name, present in (
+                        ("colour profile", carryover.icc_profile is not None),
+                        ("alpha channel", carryover.alpha is not None),
+                    )
+                    if present
+                ]
+                self._progress_callback(f"Restored the source's {' and '.join(restored)}.")
 
             return out_path
         finally:
