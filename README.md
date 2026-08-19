@@ -202,6 +202,8 @@ metadata stripping and `identify` run anywhere.
 
 ## Install
 
+**Most people want one line: `uv tool install 'pagedmark[diffusion]'`** — the plain `pagedmark` install carries the metadata tools only, so a run that touches pixels will stop and tell you what is missing. Quote the brackets: they are a glob in zsh.
+
 | You want | Install |
 | --- | --- |
 | Metadata inspection and stripping | `pagedmark` |
